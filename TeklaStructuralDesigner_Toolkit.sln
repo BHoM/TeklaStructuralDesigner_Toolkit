@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29318.209
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeklaStructuralDesigner_Adapter", "TeklaStructuralDesigner_Adapter\TeklaStructuralDesigner_Adapter.csproj", "{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeklaStructuralDesigner_Engine", "TeklaStructuralDesigner_Engine\TeklaStructuralDesigner_Engine.csproj", "{24AF6755-290F-4E08-A074-FBDA92323FF2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeklaStructuralDesigner_oM", "TeklaStructuralDesigner_oM\TeklaStructuralDesigner_oM.csproj", "{31099028-DFEB-486E-A8CD-6B4A058BDCD9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24AF6755-290F-4E08-A074-FBDA92323FF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24AF6755-290F-4E08-A074-FBDA92323FF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24AF6755-290F-4E08-A074-FBDA92323FF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24AF6755-290F-4E08-A074-FBDA92323FF2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{31099028-DFEB-486E-A8CD-6B4A058BDCD9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31099028-DFEB-486E-A8CD-6B4A058BDCD9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31099028-DFEB-486E-A8CD-6B4A058BDCD9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31099028-DFEB-486E-A8CD-6B4A058BDCD9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8C7BC1B8-5164-473F-923E-6B0155CF9AFC}
+	EndGlobalSection
+EndGlobal
