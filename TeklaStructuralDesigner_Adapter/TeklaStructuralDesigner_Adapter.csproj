@@ -7,7 +7,7 @@
     <ProjectGuid>{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>TeklaStructuralDesigner_Adapter</RootNamespace>
+    <RootNamespace>BH.Adapter.TeklaStructuralDesigner</RootNamespace>
     <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
