@@ -4,12 +4,9 @@
 BHoM Toolkit to connect with Tekla Structural Designer.
 
 Part of the [BHoM Framework](https://github.com/BHoM).
+
+# BHoM
 A great place to start is reading our Wiki [here](https://github.com/BHoM/documentation/wiki) including pages like the [Structure of the BHoM](https://github.com/BHoM/documentation/wiki/Structure-of-the-BHoM) and [Using the BHoM](https://github.com/BHoM/documentation/wiki/Using-the-BHoM).
-
-## Quick start ##
-
-Try the [installer](http://bhom.xyz/assets/installers/v2.1/BHoM%20Alpha%20v2.1.0.5%20Installer.exe) and a selection of [sample scripts](https://github.com/BHoM/samples).
-
 
 ## Building the BHoM and the Toolkits from Source ##
 You will need the following to build BHoM:
