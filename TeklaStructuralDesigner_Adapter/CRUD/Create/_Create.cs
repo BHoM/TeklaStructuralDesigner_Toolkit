@@ -38,7 +38,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         // This method gets called when appropriate by the methods contained in the base Adapter class (Push, Update).
         // It gets called once per each Type <T>.
-        protected override bool Create<T>(IEnumerable<T> objects, bool replaceAll = false)
+        protected override bool Create<T>(IEnumerable<T> objects)
         {
             //This is the main dispatcher method, calling the specific implementation methods for the other toolkits.
 
