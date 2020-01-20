@@ -26,23 +26,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.Engine.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    public static partial class Convert
     {
-        /***************************************************/
-        /**** Adapter overload method                   ****/
-        /***************************************************/
-
-        // This method gets called when appropriate by the Push method contained in the base Adapter class.
-        // It gets called once per each Type, and if equal objects are found. The equality is tested through IEqualityComparer.
-        // IEqualityComparer must be implemented per each type. If not,
-        // by default the method first deletes the existing objects, then creates new ones.
-        protected override bool UpdateObjects<T>(IEnumerable<T> objects)
-        {
-            return base.UpdateObjects<T>(objects);
-        }
-
-        /***************************************************/
+        //Key used to find the software in the custom data of created or read objects
+        public const string AdapterIdName = "TeklaStructuralDesigner_id";
     }
 }

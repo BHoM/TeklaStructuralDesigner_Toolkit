@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BH.oM.Adapter;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -36,7 +37,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         // This method gets called when appropriate by the Push method contained in the base Adapter class.
         // It gets called once per each Type.
-        protected override int Delete(Type type, IEnumerable<object> ids)
+        protected override int IDelete(Type type, IEnumerable<object> ids, ActionConfig actionConfig = null)
         {
             //Insert code here to enable deletion of specific types of objects with specific ids
             return 0;

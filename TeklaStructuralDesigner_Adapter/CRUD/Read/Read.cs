@@ -21,16 +21,44 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BH.oM.Base;
+using BH.oM.Structure.Elements;
+using BH.oM.Structure.SectionProperties;
+using BH.oM.Common.Materials;
+using BH.oM.Adapter;
 
-namespace BH.Engine.TeklaStructuralDesigner
+namespace BH.Adapter.TeklaStructuralDesigner
 {
-    public static partial class Convert
+    public partial class TeklaStructuralDesignerAdapter
     {
-        //Key used to find the software in the custom data of created or read objects
-        public const string AdapterId = "TeklaStructuralDesigner_id";
+        /***************************************************/
+        /**** Adapter overload method                   ****/
+        /***************************************************/
+
+        // This method gets called when appropriate by the Pull method contained in the base Adapter class.
+        // It gets called once per each Type.
+        protected override IEnumerable<IBHoMObject> IRead(Type type, IList ids, ActionConfig actionConfig = null)
+        {
+            //Main dispatcher method.
+            //Choose what to pull out depending on the type.
+            if (type == typeof(Node))
+                return ReadNodes(ids as dynamic);
+            else if (type == typeof(Bar))
+                return ReadBars(ids as dynamic);
+            else if (type == typeof(ISectionProperty) || type.GetInterfaces().Contains(typeof(ISectionProperty)))
+                return ReadSectionProperties(ids as dynamic);
+            else if (type == typeof(Material))
+                return ReadMaterials(ids as dynamic);
+
+            return new List<IBHoMObject>();
+        }
+
+        /***************************************************/
+
     }
 }

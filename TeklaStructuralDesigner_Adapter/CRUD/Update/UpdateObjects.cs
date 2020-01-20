@@ -21,15 +21,11 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using BH.oM.Base;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Common.Materials;
+using BH.oM.Adapter;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -39,25 +35,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /**** Adapter overload method                   ****/
         /***************************************************/
 
-        // This method gets called when appropriate by the Pull method contained in the base Adapter class.
-        // It gets called once per each Type.
-        protected override IEnumerable<IBHoMObject> Read(Type type, IList ids)
+        // This method gets called when appropriate by the Push method contained in the base Adapter class.
+        // It gets called once per each Type, and if equal objects are found. The equality is tested through IEqualityComparer.
+        // IEqualityComparer must be implemented per each type. If not,
+        // by default the method first deletes the existing objects, then creates new ones.
+        protected override bool IUpdate<T>(IEnumerable<T> objects, ActionConfig actionConfig = null)
         {
-            //Main dispatcher method.
-            //Choose what to pull out depending on the type.
-            if (type == typeof(Node))
-                return ReadNodes(ids as dynamic);
-            else if (type == typeof(Bar))
-                return ReadBars(ids as dynamic);
-            else if (type == typeof(ISectionProperty) || type.GetInterfaces().Contains(typeof(ISectionProperty)))
-                return ReadSectionProperties(ids as dynamic);
-            else if (type == typeof(Material))
-                return ReadMaterials(ids as dynamic);
-
-            return new List<IBHoMObject>();
+            return base.IUpdate<T>(objects);
         }
 
         /***************************************************/
-
     }
 }
