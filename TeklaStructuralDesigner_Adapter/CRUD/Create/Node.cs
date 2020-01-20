@@ -43,7 +43,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (Node node in nodes)
             {
                 //Tip: if the NextId method has been implemented you can get the id to be used for the creation out as (cast into applicable type used by the software):
-                object nodeId = node.CustomData[AdapterId];
+                object nodeId = node.CustomData[AdapterIdName];
             }
 
             throw new NotImplementedException();

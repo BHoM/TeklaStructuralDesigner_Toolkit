@@ -27,6 +27,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BH.oM.Structure.Elements;
 using BH.oM.Common.Materials;
+using BH.oM.Adapter;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -38,7 +39,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         // This method gets called when appropriate by the methods contained in the base Adapter class (Push, Update).
         // It gets called once per each Type <T>.
-        protected override bool Create<T>(IEnumerable<T> objects)
+        protected override bool ICreate<T>(IEnumerable<T> objects, ActionConfig actionConfig = null)
         {
             //This is the main dispatcher method, calling the specific implementation methods for the other toolkits.
 

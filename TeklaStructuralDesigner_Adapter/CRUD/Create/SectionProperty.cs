@@ -44,10 +44,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (ISectionProperty sectionProperty in sectionProperties)
             {
                 //Tip: if the NextId method has been implemented you can get the id to be used for the creation out as (cast into applicable type used by the software):
-                object secPropId = sectionProperty.CustomData[AdapterId];
+                object secPropId = sectionProperty.CustomData[AdapterIdName];
                 //If also the default implmentation for the DependencyTypes is used,
                 //one can from here get the id's of the subobjects by calling (cast into applicable type used by the software): 
-                object materialId = sectionProperty.Material.CustomData[AdapterId];
+                object materialId = sectionProperty.Material.CustomData[AdapterIdName];
             }
 
             throw new NotImplementedException();

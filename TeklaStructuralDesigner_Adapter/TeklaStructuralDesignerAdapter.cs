@@ -27,6 +27,7 @@ using System.Text;
 using System.Threading.Tasks;
 using BH.Adapter;
 using BH.Engine.TeklaStructuralDesigner;
+using BH.oM.Adapter;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -40,7 +41,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
         //Add any applicable constructors here, such as linking to a specific file or anything else as well as linking to that file through the (if existing) com link via the API
         public TeklaStructuralDesignerAdapter()
         {
-            AdapterId = BH.Engine.TeklaStructuralDesigner.Convert.AdapterId;   //Sets` the "AdapterId" to "SoftwareName_id". Generally stored as a constant string in the convert class in the SoftwareName_Engine
+            AdapterIdName = BH.Engine.TeklaStructuralDesigner.Convert.AdapterIdName;   //Sets` the "AdapterId" to "SoftwareName_id". Generally stored as a constant string in the convert class in the SoftwareName_Engine
+
+            BH.Adapter.Modules.Structure.ModuleLoader.LoadModules(this);
         }
 
 
