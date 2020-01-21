@@ -42,6 +42,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
         public TeklaStructuralDesignerAdapter()
         {
             AdapterIdName = BH.Engine.TeklaStructuralDesigner.Convert.AdapterIdName;   //Sets` the "AdapterId" to "SoftwareName_id". Generally stored as a constant string in the convert class in the SoftwareName_Engine
+            SetupComparers();
+            GetDependencyTypes();
+            
 
             BH.Adapter.Modules.Structure.ModuleLoader.LoadModules(this);
         }
