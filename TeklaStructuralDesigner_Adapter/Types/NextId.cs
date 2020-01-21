@@ -39,7 +39,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // NextId is called in the base Adapter Push method, just before the call to Create();
         // it follows that at the point of index assignment, the objects have not yet been created in the target software. 
         // This is to ensure that the object exported in the software will have the the ID that we decided here.
-        protected override object NextId(Type objectType, bool refresh = false)
+        protected override object NextFreeId(Type objectType, bool refresh = false)
         {
             //Change from object to what the specific software is using
             object index;
