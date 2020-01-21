@@ -43,12 +43,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (Bar bar in bars)
             {
                 //Tip: if the NextId method has been implemented you can get the id to be used for the creation out as (cast into applicable type used by the software):
-                object barId = bar.CustomData[AdapterId];
+                object barId = bar.CustomData[AdapterIdName];
                 //If also the default implmentation for the DependencyTypes is used,
                 //one can from here get the id's of the subobjects by calling (cast into applicable type used by the software): 
-                object startNodeId = bar.StartNode.CustomData[AdapterId];
-                object endNodeId = bar.EndNode.CustomData[AdapterId];
-                object SecPropId = bar.SectionProperty.CustomData[AdapterId];
+                object startNodeId = bar.StartNode.CustomData[AdapterIdName];
+                object endNodeId = bar.EndNode.CustomData[AdapterIdName];
+                object SecPropId = bar.SectionProperty.CustomData[AdapterIdName];
             }
 
 
