@@ -20,37 +20,40 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
 using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using System.Linq;
+using TSD.API.Remoting.Common.Properties;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    // Nearly every property returned by Tekla Structural Designer is wrapped in IReadOnlyProperty<T>,
+    // which carries an IsApplicable flag: many properties are only meaningful for some element types
+    // (a concrete option on a steel span, for instance), and reading .Value when IsApplicable is false
+    // is not something to rely on. Every unwrap in this toolkit goes through here, so that rule is
+    // enforced in exactly one place. IPropertyWithValidValues<T> and IProperty<T> both derive from
+    // IReadOnlyProperty<T>, so this single method also covers them.
+    internal static partial class Convert
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Methods                 ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
+        public static TValue ValueOrDefault<TValue>(this IReadOnlyProperty<TValue> property, TValue defaultValue = default(TValue))
         {
-            AdapterComparers = new Dictionary<Type, object>
-            {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
-            };
+            return property != null && property.IsApplicable ? property.Value : defaultValue;
+        }
+
+        /***************************************************/
+
+        // IListOfReadOnlyProperties<TItem> is not a plain list of TItem: it is a list of
+        // IReadOnlyProperty<TItem>, one wrapper per item, each with its own IsApplicable flag. This
+        // unwraps such a list, silently dropping items that are not applicable.
+        public static IEnumerable<TItem> ValuesOrEmpty<TItem>(this IEnumerable<IReadOnlyProperty<TItem>> items)
+        {
+            if (items == null)
+                return Enumerable.Empty<TItem>();
+
+            return items.Where(item => item != null && item.IsApplicable).Select(item => item.Value);
         }
 
         /***************************************************/

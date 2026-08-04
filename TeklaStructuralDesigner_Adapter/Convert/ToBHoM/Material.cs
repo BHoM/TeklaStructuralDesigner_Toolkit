@@ -20,36 +20,42 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
 using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using TSD.API.Remoting.Materials;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    internal static partial class Convert
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Methods                 ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
+        // Deliberately lossy: the Remoting API's IMaterial exposes only PoissonsRatio, ShearModulus
+        // and ThermalExpansionCoefficient, so this is as much of a material as can be reconstructed -
+        // there is no yield strength, no design code grade data, and no density, so Density is left at
+        // zero. Anyone running a self-weight or design check against a Bar pulled from this adapter
+        // needs to know that, which is why BuildSpanIdentities issues a RecordNote about it once.
+        //
+        // Units: ShearModulus is assumed to be in N/mm^2 (MPa), consistent with the mm/N unit system
+        // observed elsewhere in this API (forces in N, moments in N.mm, lengths in mm) - this specific
+        // value has not been checked against a live model; see the toolkit README.
+        public static IMaterialFragment ToBHoM(this IMaterial material)
         {
-            AdapterComparers = new Dictionary<Type, object>
+            if (material == null)
+                return null;
+
+            double poissonsRatio = material.PoissonsRatio;
+            double shearModulusPascals = material.ShearModulus * 1e6;
+            double youngsModulusPascals = 2.0 * shearModulusPascals * (1.0 + poissonsRatio);
+
+            return new GenericIsotropicMaterial
             {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
+                Name = material.Name ?? "",
+                YoungsModulus = youngsModulusPascals,
+                PoissonsRatio = poissonsRatio,
+                ThermalExpansionCoeff = material.ThermalExpansionCoefficient,
+                Density = 0,
             };
         }
 

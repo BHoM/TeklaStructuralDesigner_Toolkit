@@ -21,36 +21,23 @@
  */
 
 using System;
-using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
+using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Geometry;
 using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    internal static partial class Convert
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Methods                 ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
+        public static Node ToBHoM(Guid pointId, Point position)
         {
-            AdapterComparers = new Dictionary<Type, object>
-            {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
-            };
+            Node node = new Node { Position = position };
+            node.Fragments.Add(new TeklaStructuralDesignerId { Id = pointId });
+            return node;
         }
 
         /***************************************************/

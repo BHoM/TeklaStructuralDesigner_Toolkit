@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -24,43 +24,54 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using BH.oM.Structure.Elements;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.Constraints;
-using BH.oM.Common.Materials;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
-
         /***************************************************/
-        /**** Private methods                           ****/
+        /****            Private Methods                ****/
         /***************************************************/
 
-        //The List<string> in the methods below can be changed to a list of any type of identification more suitable for the toolkit
-        //If no ids are provided, the convention is to return all elements of the type
-
-        private List<Bar> ReadBars(List<string> ids = null)
+        // One Bar per span (see BarResults.cs for why span, not member, is the unit). This exists so
+        // that ObjectIds in a BarResultRequest can be matched against real Bar objects, and so a
+        // caller who wants geometry alongside results can Pull it - not to be a complete geometry
+        // adapter: Push is not supported, and the section/material conversions are deliberately lossy.
+        private List<Bar> ReadBars(IList ids)
         {
-            //Tip: If the software stores depending types such as Nodes and SectionProperties in separate object tables,
-            //it might be a massive preformance boost to read in and store these properties before reading in the bars 
-            //and referenced these stored objects instead of reading them in each time.
-            //For example, a case where 1000 bars share 5 total number of different SectionProperties you want, if possible,
-            //to only read in the section properties 5 times, not 1000. This might of course vary from software to software.
+            List<TsdSpanIdentity> spans = BuildSpanIdentities(TeklaStructuralDesignerConfig.TimeoutSeconds);
 
-            //Implement code for reading bars
-            throw new NotImplementedException();
+            if (ids != null && ids.Count > 0)
+            {
+                HashSet<string> requested = new HashSet<string>(ids.Cast<object>().Select(id => id?.ToString()), StringComparer.OrdinalIgnoreCase);
+                spans = spans.Where(s => requested.Contains(s.ObjectId)).ToList();
+            }
+
+            Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
+
+            List<Bar> bars = new List<Bar>();
+            int skipped = 0;
+
+            foreach (TsdSpanIdentity span in spans)
+            {
+                Node start, end;
+                if (span.StartPointId == Guid.Empty || span.EndPointId == Guid.Empty ||
+                    !nodeById.TryGetValue(span.StartPointId, out start) || !nodeById.TryGetValue(span.EndPointId, out end))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                bars.Add(span.ToBHoM(start, end));
+            }
+
+            if (skipped > 0)
+                Engine.Base.Compute.RecordWarning(skipped + " span(s) could not be resolved to Bar geometry because one or both end points were missing, and have been skipped.");
+
+            return bars;
         }
 
         /***************************************************/
-
     }
 }
-
-
-
-
-

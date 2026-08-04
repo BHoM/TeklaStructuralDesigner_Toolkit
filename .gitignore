@@ -3,6 +3,7 @@
 *.com
 *.class
 *.exe
+*.dll
 *.o
 *.so
 
@@ -56,3 +57,13 @@ bld/
 *.suo
 *.user
 .vs/
+
+# NuGet / SDK-style restore artefacts #
+########################################
+project.lock.json
+*.nuget.props
+*.nuget.targets
+
+# Test results #
+################
+[Tt]est[Rr]esults/

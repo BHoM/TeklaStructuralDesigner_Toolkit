@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -24,36 +24,49 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Base;
 using BH.oM.Structure.Elements;
-using BH.oM.Structure.Constraints;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
-
         /***************************************************/
-        /**** Private methods                           ****/
+        /****            Private Methods                ****/
         /***************************************************/
 
-        //The List<string> in the methods below can be changed to a list of any type of identification more suitable for the toolkit
-        //If no ids are provided, the convention is to return all elements of the type
-
-        private List<Node> ReadNodes(List<string> ids = null)
+        // Distinct Nodes at the start and end of every span in the model - identity only, built for
+        // the same reason ReadBars exists: so a Bar's Start/End have somewhere real to point to, and so
+        // a caller who wants to Pull geometry alongside results can.
+        private List<Node> ReadNodes(IList ids)
         {
-            //Implement code for reading nodes
-            throw new NotImplementedException();
+            List<TsdSpanIdentity> spans = BuildSpanIdentities(TeklaStructuralDesignerConfig.TimeoutSeconds);
+            Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
+
+            if (ids == null || ids.Count == 0)
+                return nodeById.Values.ToList();
+
+            HashSet<string> requested = new HashSet<string>(ids.Cast<object>().Select(id => id?.ToString()), StringComparer.OrdinalIgnoreCase);
+            return nodeById.Where(kvp => requested.Contains(kvp.Key.ToString())).Select(kvp => kvp.Value).ToList();
         }
 
         /***************************************************/
 
+        private static Dictionary<Guid, Node> NodesByPointId(List<TsdSpanIdentity> spans)
+        {
+            Dictionary<Guid, Node> nodeById = new Dictionary<Guid, Node>();
+
+            foreach (TsdSpanIdentity span in spans)
+            {
+                if (span.StartPointId != Guid.Empty && !nodeById.ContainsKey(span.StartPointId))
+                    nodeById[span.StartPointId] = Convert.ToBHoM(span.StartPointId, span.StartPosition);
+
+                if (span.EndPointId != Guid.Empty && !nodeById.ContainsKey(span.EndPointId))
+                    nodeById[span.EndPointId] = Convert.ToBHoM(span.EndPointId, span.EndPosition);
+            }
+
+            return nodeById;
+        }
+
+        /***************************************************/
     }
 }
-
-
-
-
-

@@ -20,38 +20,20 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using System.ComponentModel;
+using BH.oM.Base;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("Fragment storing identifier information of the object in Tekla Structural Designer.")]
+    public class TeklaStructuralDesignerId : IAdapterId
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Properties              ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
-        {
-            AdapterComparers = new Dictionary<Type, object>
-            {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
-            };
-        }
+        [Description("The identifier of the object in Tekla Structural Designer. For a Bar this is a string of the form 'MemberName:SpanIndex', matching the member name shown in the Tekla Structural Designer interface. For a loading case it is the case name or number.")]
+        public virtual object Id { get; set; }
 
         /***************************************************/
     }

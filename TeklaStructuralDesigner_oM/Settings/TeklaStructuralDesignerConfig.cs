@@ -20,38 +20,23 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using System.ComponentModel;
+using BH.oM.Base;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("Settings controlling how the TeklaStructuralDesignerAdapter connects to Tekla Structural Designer. Supplied once when the adapter is created, unlike a pull configuration which is supplied per action.")]
+    public class TeklaStructuralDesignerConfig : BHoMObject
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Properties              ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
-        {
-            AdapterComparers = new Dictionary<Type, object>
-            {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
-            };
-        }
+        [Description("How long to wait, in seconds, for Tekla Structural Designer to respond to a single API call before giving up. Zero or negative waits indefinitely. The default is generous because a first call against a large model can be slow.")]
+        public virtual int TimeoutSeconds { get; set; } = 300;
+
+        [Description("If true, and more than one instance of Tekla Structural Designer is running while no model path was supplied to disambiguate them, the adapter binds to the first instance it finds. If false it refuses to guess and reports an error naming every instance. Leave this false: binding to an arbitrary instance means results can silently come from the wrong model.")]
+        public virtual bool AllowArbitraryInstanceSelection { get; set; } = false;
 
         /***************************************************/
     }

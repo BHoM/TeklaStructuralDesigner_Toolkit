@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,43 +20,37 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using BH.Engine.Base.Objects;
-using BH.oM.Common.Materials;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
-using BH.oM.Structure.Constraints;
 using System;
 using System.Collections.Generic;
+using BH.oM.Structure.Constraints;
+using BH.oM.Structure.Elements;
+using BH.oM.Structure.MaterialFragments;
+using BH.oM.Structure.SectionProperties;
+using BH.oM.Structure.SurfaceProperties;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /**** Protected methods                    ****/
+        /****            Protected Methods              ****/
         /***************************************************/
 
-        //Standard implementation for dependency types (change the dictionary below to override):
-        protected void GetDependencyTypes()
+        // Declares which types must exist before another type can be created. Like the comparers, this is
+        // only consumed by Push, which this adapter does not yet support.
+        protected void SetupDependencies()
         {
             DependencyTypes = new Dictionary<Type, List<Type>>
             {
-                {typeof(Bar), new List<Type> { typeof(ISectionProperty), typeof(Node) } },
-                {typeof(ISectionProperty), new List<Type> { typeof(Material) } },
-                {typeof(RigidLink), new List<Type> { typeof(LinkConstraint), typeof(Node) } },
-                {typeof(FEMesh), new List<Type> { typeof(ISurfaceProperty), typeof(Node) } },
-                {typeof(ISurfaceProperty), new List<Type> { typeof(Material) } },
-                {typeof(Panel), new List<Type> { typeof(ISurfaceProperty) } }
+                { typeof(Bar), new List<Type> { typeof(ISectionProperty), typeof(Node) } },
+                { typeof(ISectionProperty), new List<Type> { typeof(IMaterialFragment) } },
+                { typeof(RigidLink), new List<Type> { typeof(LinkConstraint), typeof(Node) } },
+                { typeof(FEMesh), new List<Type> { typeof(ISurfaceProperty), typeof(Node) } },
+                { typeof(ISurfaceProperty), new List<Type> { typeof(IMaterialFragment) } },
+                { typeof(Panel), new List<Type> { typeof(ISurfaceProperty) } },
             };
         }
-
 
         /***************************************************/
     }
 }
-
-
-
-
-

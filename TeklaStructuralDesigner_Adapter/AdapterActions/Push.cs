@@ -20,37 +20,26 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
 using System.Collections.Generic;
-using BH.Engine.Base.Objects;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using BH.oM.Adapter;
+using BH.oM.Base;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Methods                  ****/
         /***************************************************/
 
-        // Comparers decide when two objects are to be treated as the same object. They are consumed by
-        // Push, which this adapter does not yet support, so none of them is exercised on a Pull. They are
-        // kept because they are correct and standard, not because they are used yet.
-        protected void SetupComparers()
+        // Push is overridden purely to fail clearly. The Tekla Structural Designer Remoting API is
+        // overwhelmingly read oriented, and no Create, Update or Delete path is implemented in this
+        // adapter. Without this override the base implementation would run its dependency and comparer
+        // machinery and report a successful push of zero objects, which reads as success.
+        public override List<object> Push(IEnumerable<object> objects, string tag = "", PushType pushType = PushType.AdapterDefault, ActionConfig actionConfig = null)
         {
-            AdapterComparers = new Dictionary<Type, object>
-            {
-                // 3 decimal places gives millimetre precision when merging coincident nodes.
-                { typeof(Node), new BH.Engine.Structure.NodeDistanceComparer(3) },
-                { typeof(ISectionProperty), new BHoMObjectNameOrToStringComparer() },
-                { typeof(IMaterialFragment), new BHoMObjectNameComparer() },
-                { typeof(LinkConstraint), new BHoMObjectNameComparer() },
-                { typeof(ISurfaceProperty), new BHoMObjectNameComparer() },
-            };
+            Engine.Base.Compute.RecordError("Pushing to Tekla Structural Designer is not supported. This adapter reads analysis results only. Nothing was sent to Tekla Structural Designer.");
+            return new List<object>();
         }
 
         /***************************************************/

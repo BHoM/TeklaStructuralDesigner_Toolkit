@@ -5,6 +5,40 @@ BHoM Toolkit to connect with Tekla Structural Designer.
 
 Part of the [BHoM Framework](https://github.com/BHoM).
 
+### Known Versions of Software Supported
+Tekla Structural Designer 2024, via `TeklaStructuralDesigner.RemotingAPI` package version 24.0.0.
+
+This toolkit connects through Tekla Structural Designer's Remoting API, which is a gRPC client that
+**attaches to an already-running instance of Tekla Structural Designer with a model open**. It has no
+means of launching Tekla Structural Designer or opening a file itself - unlike most BHoM adapters, the
+software must already be running before the adapter is activated.
+
+This is currently a **read-only, results-focused** adapter: it pulls bar end forces (`BarResultRequest`
+/ `BarForce`) and the Bars/Nodes needed to identify them. Push (Create/Update/Delete) is not supported.
+
+### Deployment
+Tekla Structural Designer's Remoting API brings its own gRPC dependency chain (`Grpc.Core`,
+`Google.Protobuf`, and several BCL shims). Three of those shims collide, at a different version, with
+assemblies other BHoM toolkits already place in `C:\ProgramData\BHoM\Assemblies` (for example ETABS'
+`Microsoft.Win32.Registry`, and the `System.Runtime.CompilerServices.Unsafe` most toolkits pull in
+indirectly). Overwriting those would break other toolkits.
+
+For that reason, `TeklaStructuralDesigner_Adapter.dll` deploys top level as usual, but the Tekla
+Structural Designer API and its whole dependency closure deploy into a **private subfolder**,
+`C:\ProgramData\BHoM\Assemblies\TeklaStructuralDesigner\`, served at runtime by an `AssemblyResolve`
+handler (`Adapter/AssemblyResolver.cs`). **Do not "tidy" this by flattening those files into the shared
+folder** - that is what the private subfolder exists to prevent. See the comment on the `CopyToBHoM`
+target in `TeklaStructuralDesigner_Adapter.csproj` for the full reasoning, and the version conflict
+table it documents.
+
+### A note on axis convention
+`TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` exists because the mapping from Tekla Structural
+Designer's local `y`/`z` axes onto BHoM's major/minor axis convention has not been confirmed against a
+live, solved model as of this toolkit's initial port. The default (`false`) is BHoM's own stated
+convention (`MY` major axis bending, `MZ` minor axis bending). If a model with a known correct answer
+shows the mapping is transposed, set this `true` - and please raise an issue or PR updating the default,
+since every user of this toolkit is affected the same way.
+
 # BHoM
 A great place to start is reading our Wiki [here](https://github.com/BHoM/documentation/wiki) including pages like the [Structure of the BHoM](https://bhom.xyz/documentation/Basics/Coding%20fundamentals/The-BHoM-code-organisation/) and [Using the BHoM](https://bhom.xyz/documentation/Basics/Using-the-BHoM/).
 
