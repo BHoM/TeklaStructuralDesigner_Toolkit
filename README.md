@@ -6,30 +6,93 @@ BHoM Toolkit to connect with Tekla Structural Designer.
 Part of the [BHoM Framework](https://github.com/BHoM).
 
 ### Known Versions of Software Supported
-Tekla Structural Designer 2024, via `TeklaStructuralDesigner.RemotingAPI` package version 24.0.0.
+Tekla Structural Designer 2026, via `TeklaStructuralDesigner.RemotingAPI` package version 26.0.1.
+
+The pin is not arbitrary: Tekla's own Tekla Structural Designer 2026 SP1 release notes state that
+26.0.1 is the Remoting API version for that release, and SP1 is version 26.1.0.75. Newer packages
+exist on NuGet (26.2.0 at time of writing) but track a later service pack - an API newer than the
+application it connects to is the direction that fails, with *"A method has been invoked which is no
+longer supported in the connected instance of Tekla Structural Designer"*. Change the version in one
+place, the `TsdApiVersion` property in `TeklaStructuralDesigner_Adapter.csproj`.
 
 This toolkit connects through Tekla Structural Designer's Remoting API, which is a gRPC client that
 **attaches to an already-running instance of Tekla Structural Designer with a model open**. It has no
 means of launching Tekla Structural Designer or opening a file itself - unlike most BHoM adapters, the
 software must already be running before the adapter is activated.
 
-This is currently a **read-only, results-focused** adapter: it pulls bar end forces (`BarResultRequest`
-/ `BarForce`) and the Bars/Nodes needed to identify them. Push (Create/Update/Delete) is not supported.
+This is a **read-only** adapter. Push (Create/Update/Delete) is not supported. What it pulls:
+
+| Pull | Returns |
+| --- | --- |
+| `Bar`, `Node` | One Bar per span, and the Nodes at span ends |
+| `Loadcase`, `LoadCombination`, `ICase` | Loadcases with a `LoadNature`, and combinations whose `LoadCases` reference those Loadcases |
+| `ILoad`, or a concrete load type | Bar and nodal loads - see below |
+| `BarResultRequest` / `BarForce` | Bar end forces |
+
+### Loads
+Tekla Structural Designer hangs loads off loadcases, so pulling loads reads every loadcase. Member
+loads map onto `BarUniformlyDistributedLoad`, `BarVaryingDistributedLoad` and `BarPointLoad`; nodal
+loads map onto `PointLoad`. Slab, perimeter, snow, wind, temperature and settlement loads are **not**
+read: they act on surfaces and areas this adapter does not pull, so there would be nothing to attach
+them to.
+
+Four things are worth knowing before trusting a pulled load:
+
+- **Derived loads are excluded by default.** Tekla Structural Designer generates loads of its own -
+  decomposed slab and wind loads, loads arriving from an incoming element - alongside the ones a user
+  applied. Pulling both double counts the same loading, so only user-applied loads come back unless
+  `IncludeDerivedLoads` is set on the pull configuration. Set it when you want what actually acts on
+  the members rather than what was drawn.
+- **Unit scaling is inferred, not confirmed.** Loads are converted assuming Tekla Structural Designer
+  reports them in newtons and millimetres, which is the convention its *results* demonstrably use. If
+  pulled loads come back a thousand times too large or too small, that assumption does not hold for
+  applied loads; the fix belongs in the scale constants at the top of `Convert/ToBHoM/Load.cs`, and
+  the `UdlMagnitudeMatchesTheModel` test exists to settle it.
+- **Some loads are deliberately refused**, each with a counted warning saying why: trapezoidal loads
+  (the API exposes one magnitude and one distance, which is not enough to reconstruct the shape),
+  eccentricity moments (a consequence of how a load is attached, so pulling it would double count),
+  loads in the undocumented `U`/`V` directions, and loads whose positions are measured in projection.
+- **Combination factors.** Tekla Structural Designer holds strength, service and quasi-permanent
+  factors against every loadcase in a combination; BHoM's `LoadCombination` holds one. The strength
+  factor is used by default - set `CombinationFactor` on the pull configuration for the others.
 
 ### Deployment
 Tekla Structural Designer's Remoting API brings its own gRPC dependency chain (`Grpc.Core`,
-`Google.Protobuf`, and several BCL shims). Three of those shims collide, at a different version, with
+`Google.Protobuf`, and several BCL shims). Four of those shims collide, at a different version, with
 assemblies other BHoM toolkits already place in `C:\ProgramData\BHoM\Assemblies` (for example ETABS'
 `Microsoft.Win32.Registry`, and the `System.Runtime.CompilerServices.Unsafe` most toolkits pull in
 indirectly). Overwriting those would break other toolkits.
 
-For that reason, `TeklaStructuralDesigner_Adapter.dll` deploys top level as usual, but the Tekla
-Structural Designer API and its whole dependency closure deploy into a **private subfolder**,
-`C:\ProgramData\BHoM\Assemblies\TeklaStructuralDesigner\`, served at runtime by an `AssemblyResolve`
-handler (`Adapter/AssemblyResolver.cs`). **Do not "tidy" this by flattening those files into the shared
-folder** - that is what the private subfolder exists to prevent. See the comment on the `CopyToBHoM`
-target in `TeklaStructuralDesigner_Adapter.csproj` for the full reasoning, and the version conflict
-table it documents.
+For that reason the dependency closure is deployed in two parts:
+
+- **Those seven BCL shims, and only those,** go into a private subfolder,
+  `C:\ProgramData\BHoM\Assemblies\TeklaStructuralDesigner\`, served at runtime by an
+  `AssemblyResolve` handler (`Adapter/AssemblyResolver.cs`). **Do not "tidy" these into the shared
+  folder** - that is what the private subfolder exists to prevent.
+- **Everything else** - `TeklaStructuralDesigner_Adapter.dll`, `TSD.API.Remoting.dll`, the gRPC
+  stack and the native `grpc_csharp_ext` binaries - deploys top level, where ordinary probing finds
+  it. **Do not move the API into the private folder either.** BHoM enumerates adapter types at
+  startup by calling `GetTypes()` on every assembly in the shared folder, which happens before any
+  adapter constructor has run and therefore before the `AssemblyResolve` handler is registered. If
+  `TSD.API.Remoting.dll` is not reachable by normal probing at that moment, `GetTypes()` throws,
+  BHoM discards this assembly whole, and **the adapter silently does not appear in the UI's adapter
+  list at all** - no error, just an absence.
+
+See the comment on the `CopyToBHoM` target in `TeklaStructuralDesigner_Adapter.csproj` for the full
+reasoning, and the version conflict table it documents.
+
+As resolved for API package 26.0.1, the private copies are *older* than the shared ones in three of
+the four cases - the reverse of how it was under 24.0.0, because the 26.x package lowered its
+`Microsoft.Bcl.AsyncInterfaces` and `Microsoft.Win32.Registry` pins and stopped pinning the other
+shims directly. That does not change the conclusion: the loader does not version check an assembly
+returned from an `AssemblyResolve` handler in either direction, and flattening the folder is now a
+straight downgrade rather than an upgrade.
+
+The build prunes the private folder of anything no longer in the private set, so upgrading across
+API package versions does not leave stale assemblies behind for the resolver to go on serving.
+
+Note that Rhino, Excel and any other host that has loaded the toolkit will hold a file lock on these
+assemblies. **Close them before rebuilding**, or the post-build copy fails with `MSB3021`.
 
 ### A note on axis convention
 `TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` exists because the mapping from Tekla Structural

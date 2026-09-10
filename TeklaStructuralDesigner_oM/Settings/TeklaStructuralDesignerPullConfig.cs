@@ -50,6 +50,12 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("Swaps the major and minor local axes when converting forces, so that the moment Tekla Structural Designer reports about one local axis is written to the other. Only set this true if a known model demonstrates that the default mapping is transposed; see the toolkit README. Shears are swapped together with moments, because a genuine axis transposition affects both.")]
         public virtual bool SwapMajorMinorAxes { get; set; } = false;
 
+        [Description("Which of Tekla Structural Designer's three per loadcase factors is written into a pulled LoadCombination. Only affects pulling LoadCombination objects; it has no bearing on results, which Tekla Structural Designer has already combined internally.")]
+        public virtual TeklaStructuralDesignerCombinationFactor CombinationFactor { get; set; } = TeklaStructuralDesignerCombinationFactor.Strength;
+
+        [Description("If true, loads that Tekla Structural Designer generated rather than a user applied - decomposed slab and wind loads, solver loads, loads arriving from an incoming element - are pulled alongside the applied loads. False by default: a decomposed load is the same loading already described by the slab load it came from, so pulling both double counts it. Set this true when you want what actually acts on the members rather than what was drawn.")]
+        public virtual bool IncludeDerivedLoads { get; set; } = false;
+
         /***************************************************/
     }
 }

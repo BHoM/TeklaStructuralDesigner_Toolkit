@@ -28,15 +28,21 @@ using System.Runtime.CompilerServices;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // The Tekla Structural Designer API and its gRPC dependency chain are deployed to a private
-    // subfolder of the BHoM assemblies folder rather than alongside the BHoM assemblies, because
-    // three of them collide with assemblies other toolkits bind at an older version. See the
-    // deployment comment in TeklaStructuralDesigner_Adapter.csproj for the full reasoning.
+    // A handful of BCL shims from the Tekla Structural Designer dependency chain are deployed to a
+    // private subfolder of the BHoM assemblies folder rather than alongside the BHoM assemblies,
+    // because they collide by version with assemblies other toolkits bind. See the deployment
+    // comment in TeklaStructuralDesigner_Adapter.csproj for the full reasoning.
     //
-    // Because those files are not next to this assembly, normal directory probing will not find
-    // them, so this resolver is required rather than defensive. It is safe to the extent that it
-    // only ever answers for files physically present in our own folder, and returns null for
-    // everything else, so it cannot intercept another toolkit's binding.
+    // Note the narrow scope: this resolver serves ONLY those shims. TSD.API.Remoting itself and the
+    // gRPC stack deploy top level and are found by ordinary probing, which they have to be - BHoM
+    // enumerates adapter types at startup, before any constructor has run and therefore before this
+    // resolver is registered, and an assembly whose GetTypes() throws there is discarded entirely.
+    // Moving the API back into the private folder makes the adapter vanish from the UI.
+    //
+    // Because the shims are not next to this assembly, normal directory probing will not find them,
+    // so this resolver is required rather than defensive. It is safe to the extent that it only ever
+    // answers for files physically present in our own folder, and returns null for everything else,
+    // so it cannot intercept another toolkit's binding.
     //
     // BHoM's own resolver cannot serve this: BH.Engine.Base.Global.ResolveBHoMAssembly gates on
     // Assembly.GetCallingAssembly().Location, which inside a CLR invoked AssemblyResolve handler is

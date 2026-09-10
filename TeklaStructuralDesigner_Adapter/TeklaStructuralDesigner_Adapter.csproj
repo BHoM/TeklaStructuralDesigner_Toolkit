@@ -30,10 +30,19 @@
 
   <PropertyGroup>
     <!-- Pinned to match the installed Tekla Structural Designer. Hoisted into a property so that
-         moving to another major version is a one line change. The net48 asset of the 24.x package
-         uses native (C core) gRPC rather than Grpc.Net.Client, which is why it works on .NET
-         Framework at all; do not assume a later major behaves the same. -->
-    <TsdApiVersion>24.0.0</TsdApiVersion>
+         moving to another major version is a one line change.
+
+         26.0.1 rather than the newest published package: Tekla's own TSD 2026 SP1 release notes
+         state that 26.0.1 is the Remoting API version for that release, and SP1 (26.1.0.75) is what
+         is deployed. An API newer than the application it talks to is the direction that fails, with
+         "A method has been invoked which is no longer supported in the connected instance".
+
+         The net48 asset uses native (C core) gRPC rather than Grpc.Net.Client, which is why this
+         works on .NET Framework at all. That was true of 24.x and has been re-checked for 26.x,
+         where it is now the only target for which it holds: the net6.0, net8.0 and netstandard2.1
+         assets of the 26.x package moved to managed Grpc.Net.Client 2.67.0, and only the net48 one
+         still declares Grpc 2.46.6. Re-check this, rather than assume it, on the next major. -->
+    <TsdApiVersion>26.0.1</TsdApiVersion>
     <!-- grpc_csharp_ext is architecture specific, and every host that loads this adapter
          (Rhino, Excel) is 64 bit. -->
     <PlatformTarget>x64</PlatformTarget>
@@ -143,21 +152,63 @@
     The toolkit assembly goes top level into the BHoM assemblies folder, because BHoM's
     LoadAllAssemblies only scans that directory and only for names ending oM, _Engine or _Adapter.
 
-    The Tekla Structural Designer API and its whole gRPC dependency chain go into a PRIVATE
-    subfolder instead. That is a hard requirement, not tidiness: three of its assemblies collide
-    with assemblies already in the shared folder that other toolkits bind at the older version -
+    The dependency closure is then SPLIT in two, and the split is load bearing.
 
-        System.Runtime.CompilerServices.Unsafe   6.0.0.0  here vs  5.0.0.0  shared
-        Microsoft.Bcl.AsyncInterfaces            7.0.0.0  here vs  5.0.0.0  shared
-        System.Numerics.Vectors                  4.1.4.0  here vs  4.1.3.0  shared
+    Only the BCL shims that share a file name with the shared folder go into the PRIVATE subfolder.
+    The Tekla Structural Designer API itself, the gRPC stack and the native grpc_csharp_ext binaries
+    deploy top level alongside everything else, because normal probing has to be able to find them.
 
-    - so overwriting the shared copies would break unrelated toolkits, while leaving them alone
-    would stop gRPC binding. Serving the newer versions out of a private folder through
+    Why they cannot all be private: BHoM enumerates adapter types at startup, by calling GetTypes()
+    on every assembly in the shared folder. That happens long before any adapter constructor runs,
+    so the AssemblyResolve handler in Adapter/AssemblyResolver.cs - which is registered BY that
+    constructor - is not installed yet. With TSD.API.Remoting.dll reachable only from the private
+    folder, GetTypes() on this assembly throws ReflectionTypeLoadException, BHoM discards the whole
+    assembly, and TeklaStructuralDesignerAdapter never appears in the UI's adapter list at all.
+    Measured against BH.Engine.Base.Query.AdapterTypeList(): 52 adapters with the API private,
+    53 with it top level. Notably every real type in this assembly loads fine, including the adapter
+    itself - the four that fail are compiler generated lambda closures that captured TSD typed
+    locals - so the assembly is lost because GetTypes() THREW, not because anything needed was
+    unloadable. Do not "simplify" this back into a single private folder.
+
+    The shims stay private because they are the ones that actually collide, and nothing needs them
+    until the adapter is running, by which point the resolver is registered. Several of them share a
+    file name with an assembly already in the shared folder that other toolkits bind at a DIFFERENT
+    version. As resolved for API package 26.0.1 -
+
+        Microsoft.Bcl.AsyncInterfaces            6.0.0.0  here vs  5.0.0.0  shared
+        Microsoft.Win32.Registry                 4.0.0.0  here vs  5.0.0.0  shared
+        System.Buffers                           4.0.2.0  here vs  4.0.3.0  shared
+        System.Runtime.CompilerServices.Unsafe   4.0.4.1  here vs  5.0.0.0  shared
+
+        System.Memory                            4.0.1.1  =        4.0.1.1  shared
+        System.Numerics.Vectors                  4.1.3.0  =        4.1.3.0  shared
+        System.Threading.Tasks.Extensions        4.2.0.1  =        4.2.0.1  shared
+
+    Note the direction. Under 24.0.0 our copies were uniformly NEWER than the shared ones; under
+    26.0.1 three of the four are OLDER, because the package moved Microsoft.Bcl.AsyncInterfaces
+    7.0.0 -> 6.0.0 and Microsoft.Win32.Registry 5.0.0 -> 4.0.0 and stopped pinning the rest
+    directly. The conclusion is unchanged and if anything firmer: overwriting the shared copies is
+    now a straight downgrade of assemblies unrelated toolkits depend on, while leaving them alone
+    would stop gRPC binding. Serving our own out of a private folder through
     Adapter/AssemblyResolver.cs lets both identities coexist, because the .NET Framework loader
-    does not version check an assembly returned from an AssemblyResolve handler.
+    does not version check an assembly returned from an AssemblyResolve handler - which holds
+    whichever of the two is the newer.
 
-    The source is $(TargetDir) minus this toolkit's own output. That is deliberate: it copies
-    exactly what the SDK resolved, which matters because Grpc.Core's own targets flatten the
+    The last three now match the shared folder exactly, so they are a file name clash only. They
+    are still deployed privately rather than skipped: which of them actually differ is a property
+    of transitive NuGet resolution and moves on any package bump, so the private set is defined by
+    file name, not by a version comparison that would silently change under us.
+
+    That private set is written out EXPLICITLY below rather than discovered by testing which files
+    happen to collide, because discovery would make deployment depend on which other toolkits are
+    installed on the build machine: a developer without ETABS would get Microsoft.Win32.Registry
+    deployed top level, and installing ETABS later would then overwrite it. Anything that collides
+    unexpectedly is still caught, warned about, and deployed privately as a fail safe - so a package
+    bump that introduces a new clash degrades to the safe behaviour instead of overwriting a shared
+    assembly other toolkits depend on.
+
+    Otherwise the source is $(TargetDir) minus this toolkit's own output. That is deliberate: it
+    copies exactly what the SDK resolved, which matters because Grpc.Core's own targets flatten the
     native grpc_csharp_ext binaries into the output root and MSBuild substitutes the
     Windows specific runtime assets over the portable ones. Reconstructing that from individual
     item groups would be a re-implementation of work the SDK has already done correctly.
@@ -169,19 +220,50 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <TsdPrivateDependency Include="$(TargetDir)**\*.*"
-                            Exclude="$(TargetDir)**\TeklaStructuralDesigner_*;$(TargetDir)**\*.pdb" />
-      <TsdPrivateClash Include="@(TsdPrivateDependency)"
-                       Condition="'%(Extension)' == '.dll' And Exists('$(BHoMAssembliesDir)\%(Filename)%(Extension)')" />
+      <!-- The known colliders. Explicit, for the reasons in the comment above. -->
+      <TsdKnownPrivate Include="$(TargetDir)Microsoft.Bcl.AsyncInterfaces.dll;
+                                $(TargetDir)Microsoft.Win32.Registry.dll;
+                                $(TargetDir)System.Buffers.dll;
+                                $(TargetDir)System.Memory.dll;
+                                $(TargetDir)System.Numerics.Vectors.dll;
+                                $(TargetDir)System.Runtime.CompilerServices.Unsafe.dll;
+                                $(TargetDir)System.Threading.Tasks.Extensions.dll" />
+
+      <!-- Everything else the SDK resolved. The non-Windows gRPC natives are dropped rather than
+           deployed: they cannot load on this platform and would only be clutter in a folder shared
+           with every other toolkit. -->
+      <TsdCandidateShared Include="$(TargetDir)**\*.*"
+                          Exclude="$(TargetDir)**\TeklaStructuralDesigner_*;
+                                   $(TargetDir)**\*.pdb;
+                                   $(TargetDir)**\*.so;
+                                   $(TargetDir)**\*.dylib;
+                                   @(TsdKnownPrivate)" />
+
+      <!-- Fail safe: anything not on the known list that nonetheless collides is treated as private
+           rather than written over the shared copy. -->
+      <TsdUnexpectedClash Include="@(TsdCandidateShared)"
+                          Condition="'%(Extension)' == '.dll' And Exists('$(BHoMAssembliesDir)\%(Filename)%(Extension)')" />
+
+      <TsdPrivateDependency Include="@(TsdKnownPrivate);@(TsdUnexpectedClash)" />
+      <TsdSharedDependency Include="@(TsdCandidateShared)" Exclude="@(TsdUnexpectedClash)" />
+
+      <!-- Private-folder files that are no longer part of the private set, left behind by an
+           earlier build against a different API package. The resolver would go on serving these. -->
+      <TsdPrivateStale Include="$(TsdPrivateDir)\**\*.*"
+                       Exclude="@(TsdPrivateDependency->'$(TsdPrivateDir)\%(Filename)%(Extension)')" />
     </ItemGroup>
 
     <!-- Fires when a package bump introduces a new shared-folder name clash, so it cannot pass
          unnoticed. A clash is expected and handled; a clash nobody knows about is not. -->
-    <Warning Condition="'@(TsdPrivateClash)' != ''"
-             Text="These Tekla Structural Designer dependencies share a file name with an assembly already in $(BHoMAssembliesDir): @(TsdPrivateClash->'%(Filename)%(Extension)', ', '). They are deployed to the private folder only, which is correct. Confirm Adapter/AssemblyResolver.cs still resolves them and that the shared copies were left untouched." />
+    <Warning Condition="'@(TsdUnexpectedClash)' != ''"
+             Text="These Tekla Structural Designer dependencies were about to be deployed top level but share a file name with an assembly already in $(BHoMAssembliesDir): @(TsdUnexpectedClash->'%(Filename)%(Extension)', ', '). They have been deployed to the private folder instead, leaving the shared copies untouched. Confirm that is right, and if it is, add them to TsdKnownPrivate so the decision is recorded rather than rediscovered." />
 
     <MakeDir Directories="$(TsdPrivateDir)" />
+    <Delete Files="@(TsdPrivateStale)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BHoMAssembliesDir)" />
+    <Copy SourceFiles="@(TsdSharedDependency)"
+          DestinationFiles="@(TsdSharedDependency->'$(BHoMAssembliesDir)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(TsdPrivateDependency)"
           DestinationFiles="@(TsdPrivateDependency->'$(TsdPrivateDir)\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />

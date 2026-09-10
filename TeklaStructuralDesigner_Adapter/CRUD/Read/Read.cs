@@ -25,9 +25,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using BH.oM.Adapter;
+using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Analytical.Results;
 using BH.oM.Base;
 using BH.oM.Structure.Elements;
+using BH.oM.Structure.Loads;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -60,8 +62,51 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<IBHoMObject>();
             }
 
-            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter currently reads Bars, Nodes and bar forces; use a BarResultRequest to pull bar forces.");
+            TeklaStructuralDesignerPullConfig config = PullConfigOrDefault(actionConfig);
+
+            if (type == typeof(Loadcase))
+                return ReadLoadcases(ids).Cast<IBHoMObject>();
+
+            if (type == typeof(LoadCombination))
+                return ReadLoadCombinations(ids, config).Cast<IBHoMObject>();
+
+            // ICase asked for on its own means both kinds of case, which is what a caller filtering on
+            // the interface rather than on a concrete type is asking for.
+            if (type == typeof(ICase))
+                return ReadLoadcases(ids).Cast<IBHoMObject>().Concat(ReadLoadCombinations(ids, config).Cast<IBHoMObject>());
+
+            // Loads are matched on assignability rather than equality, so that ILoad returns every
+            // supported load and a concrete type returns just that one. The ids of a load request are
+            // not meaningful - a load has no identity of its own in Tekla Structural Designer - so they
+            // are not consulted here, unlike for Bars, Nodes and cases.
+            if (typeof(ILoad).IsAssignableFrom(type))
+            {
+                if (ids != null && ids.Count > 0)
+                    Engine.Base.Compute.RecordWarning("Loads have no identifier of their own in Tekla Structural Designer, so the ids on this request have been ignored. Filter the pulled loads by their Loadcase instead.");
+
+                return ReadLoads(type, config).Cast<IBHoMObject>();
+            }
+
+            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Loadcases, LoadCombinations, bar and nodal loads, and bar forces; use a BarResultRequest to pull bar forces.");
             return new List<IBHoMObject>();
+        }
+
+        /***************************************************/
+        /****            Private Methods                ****/
+        /***************************************************/
+
+        // Shared by every read that takes settings, so that a caller who passes the wrong kind of
+        // ActionConfig is told once, in the same words, wherever it happened.
+        private static TeklaStructuralDesignerPullConfig PullConfigOrDefault(ActionConfig actionConfig)
+        {
+            TeklaStructuralDesignerPullConfig config = actionConfig as TeklaStructuralDesignerPullConfig;
+            if (config != null)
+                return config;
+
+            if (actionConfig != null)
+                Engine.Base.Compute.RecordWarning("The supplied ActionConfig is not a TeklaStructuralDesignerPullConfig; default pull settings have been used instead.");
+
+            return new TeklaStructuralDesignerPullConfig();
         }
 
         /***************************************************/

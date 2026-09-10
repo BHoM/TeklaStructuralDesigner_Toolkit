@@ -67,15 +67,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (request.Modes != null && request.Modes.Count > 0)
                 Engine.Base.Compute.RecordWarning("Modal results are not supported by this adapter; the requested Modes have been ignored.");
 
-            TeklaStructuralDesignerPullConfig config = actionConfig as TeklaStructuralDesignerPullConfig;
-            if (config == null)
-            {
-                if (actionConfig != null)
-                {
-                    Engine.Base.Compute.RecordWarning("The supplied ActionConfig is not a TeklaStructuralDesignerPullConfig; default pull settings have been used instead.");
-                }
-                config = new TeklaStructuralDesignerPullConfig();
-            }
+            TeklaStructuralDesignerPullConfig config = PullConfigOrDefault(actionConfig);
 
             int timeoutSeconds = TeklaStructuralDesignerConfig.TimeoutSeconds;
 
