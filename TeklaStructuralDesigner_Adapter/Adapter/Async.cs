@@ -91,27 +91,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-
-        // Overload for calls that take no cancellation token.
-        internal static T RunSync<T>(Func<Task<T>> taskFactory, int timeoutSeconds, string description)
-        {
-            if (taskFactory == null)
-                throw new ArgumentNullException(nameof(taskFactory));
-
-            Task<T> task = Task.Run(taskFactory);
-            int timeoutMilliseconds = timeoutSeconds > 0 ? timeoutSeconds * 1000 : Timeout.Infinite;
-
-            if (!task.Wait(timeoutMilliseconds))
-            {
-                // The underlying task keeps running: without a token there is no way to abandon it.
-                // Prefer the token overload wherever the API accepts one.
-                throw new TimeoutException(TimeoutMessage(timeoutSeconds, description));
-            }
-
-            return task.GetAwaiter().GetResult();
-        }
-
-        /***************************************************/
         /****            Private Methods                ****/
         /***************************************************/
 

@@ -22,9 +22,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using TSD.API.Remoting.Loading;
+using TsdQuery = BH.Engine.Adapters.TeklaStructuralDesigner.Query;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -35,47 +35,37 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /****            (Loading case identity)        ****/
         /***************************************************/
 
-        // Builds the list of loading cases results can be requested for, according to the pull
-        // configuration. Only combinations are read by default: on a real model, individual loadcases
-        // multiply the number of results returned without usually being what was wanted, and a bar
-        // force schedule is normally built from combinations in any case.
-        private List<TsdLoadingCaseIdentity> BuildLoadingCaseIdentities(TeklaStructuralDesignerPullConfig config, int timeoutSeconds)
+        // Every loading case results can be read for: each combination at each limit state it is
+        // assessed for, then each loadcase - numbered and named exactly as the Loadcase and
+        // LoadCombination objects a Pull returns, so that either can be handed back in a result request.
+        // Which of these a request with no cases reads is decided in FilterCases, from the pull
+        // configuration; a case named on the request is always found here.
+        private List<TsdLoadingCaseIdentity> BuildLoadingCaseIdentities(int timeoutSeconds)
         {
             List<TsdLoadingCaseIdentity> identities = new List<TsdLoadingCaseIdentity>();
 
-            if (config.IncludeCombinations)
-            {
-                List<ICombination> combinations;
-                try
-                {
-                    combinations = Async.RunSync(ct => m_Model.GetCombinationsAsync(null, ct), timeoutSeconds, "reading load combinations").ToList();
-                }
-                catch (Exception e)
-                {
-                    Engine.Base.Compute.RecordError("Failed to read load combinations from Tekla Structural Designer. " + e.Message);
-                    combinations = new List<ICombination>();
-                }
+            List<ICombination> combinations = ReadTsdCombinations(timeoutSeconds);
 
+            foreach (TeklaStructuralDesignerLimitState limitState in m_LimitStates)
+            {
                 foreach (ICombination combination in combinations)
-                    identities.Add(new TsdLoadingCaseIdentity(combination.Id, Identifier(combination.Name, combination.UserName, combination.Index), true));
+                {
+                    if (!combination.IsAssessedFor(limitState))
+                        continue;
+
+                    Guid resultsId = combination.ResultsId(limitState);
+                    int number = TsdQuery.CaseNumber(combination.Number(), limitState);
+                    if (resultsId == Guid.Empty || number < 0)
+                        continue;
+
+                    identities.Add(new TsdLoadingCaseIdentity(resultsId, number, TsdQuery.CombinationName(combination.Name, limitState), limitState));
+                }
             }
 
-            if (config.IncludeLoadcases)
-            {
-                List<ILoadcase> loadcases;
-                try
-                {
-                    loadcases = Async.RunSync(ct => m_Model.GetLoadcasesAsync(null, ct), timeoutSeconds, "reading loadcases").ToList();
-                }
-                catch (Exception e)
-                {
-                    Engine.Base.Compute.RecordError("Failed to read loadcases from Tekla Structural Designer. " + e.Message);
-                    loadcases = new List<ILoadcase>();
-                }
-
-                foreach (ILoadcase loadcase in loadcases)
-                    identities.Add(new TsdLoadingCaseIdentity(loadcase.Id, Identifier(loadcase.Name, loadcase.UserName, loadcase.Index), false));
-            }
+            List<ILoadcase> loadcases = ReadTsdLoadcases(timeoutSeconds, null);
+            Dictionary<Guid, int> loadcaseNumbers = LoadcaseNumbers(loadcases);
+            foreach (ILoadcase loadcase in loadcases)
+                identities.Add(new TsdLoadingCaseIdentity(loadcase.Id, loadcaseNumbers[loadcase.Id], Identifier(loadcase.Name, loadcase.UserName, loadcase.Index), null));
 
             return identities;
         }

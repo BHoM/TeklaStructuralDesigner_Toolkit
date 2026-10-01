@@ -21,6 +21,7 @@
  */
 
 using BH.oM.Adapters.TeklaStructuralDesigner;
+using TsdAnalysisType = TSD.API.Remoting.Solver.AnalysisType;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -33,67 +34,45 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // An explicit switch rather than a numeric cast, even though the two enums are declared in the
         // same order: a cast would silently go wrong the day either enum gains, loses, or reorders a
         // value, and this way that mistake is instead an unhandled case caught by the default branch.
-        public static TSD.API.Remoting.Solver.AnalysisType ToTeklaStructuralDesigner(this TeklaStructuralDesignerAnalysisType analysisType)
+        public static TsdAnalysisType ToTeklaStructuralDesigner(this TeklaStructuralDesignerAnalysisType analysisType)
         {
             switch (analysisType)
             {
                 case TeklaStructuralDesignerAnalysisType.FirstOrderLinear:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderLinear;
+                    return TsdAnalysisType.FirstOrderLinear;
                 case TeklaStructuralDesignerAnalysisType.FirstOrderNonLinear:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderNonLinear;
+                    return TsdAnalysisType.FirstOrderNonLinear;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderLinear:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderLinear;
+                    return TsdAnalysisType.SecondOrderLinear;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderNonLinear:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderNonLinear;
+                    return TsdAnalysisType.SecondOrderNonLinear;
                 case TeklaStructuralDesignerAnalysisType.GrillageChaseDown:
-                    return TSD.API.Remoting.Solver.AnalysisType.GrillageChaseDown;
+                    return TsdAnalysisType.GrillageChaseDown;
                 case TeklaStructuralDesignerAnalysisType.FEChaseDown:
-                    return TSD.API.Remoting.Solver.AnalysisType.FEChaseDown;
+                    return TsdAnalysisType.FEChaseDown;
                 case TeklaStructuralDesignerAnalysisType.FirstOrderVibration:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderVibration;
+                    return TsdAnalysisType.FirstOrderVibration;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderBuckling:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderBuckling;
+                    return TsdAnalysisType.SecondOrderBuckling;
                 case TeklaStructuralDesignerAnalysisType.SeismicVibration:
-                    return TSD.API.Remoting.Solver.AnalysisType.SeismicVibration;
+                    return TsdAnalysisType.SeismicVibration;
                 case TeklaStructuralDesignerAnalysisType.FirstOrderRsaSeismic:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderRsaSeismic;
+                    return TsdAnalysisType.FirstOrderRsaSeismic;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderRsaSeismic:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderRsaSeismic;
+                    return TsdAnalysisType.SecondOrderRsaSeismic;
                 case TeklaStructuralDesignerAnalysisType.SequentialLoading:
-                    return TSD.API.Remoting.Solver.AnalysisType.SequentialLoading;
+                    return TsdAnalysisType.SequentialLoading;
                 case TeklaStructuralDesignerAnalysisType.FirstOrderLinearStagedConstruction:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderLinearStagedConstruction;
+                    return TsdAnalysisType.FirstOrderLinearStagedConstruction;
                 case TeklaStructuralDesignerAnalysisType.FirstOrderNonLinearStagedConstruction:
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderNonLinearStagedConstruction;
+                    return TsdAnalysisType.FirstOrderNonLinearStagedConstruction;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderLinearStagedConstruction:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderLinearStagedConstruction;
+                    return TsdAnalysisType.SecondOrderLinearStagedConstruction;
                 case TeklaStructuralDesignerAnalysisType.SecondOrderNonLinearStagedConstruction:
-                    return TSD.API.Remoting.Solver.AnalysisType.SecondOrderNonLinearStagedConstruction;
+                    return TsdAnalysisType.SecondOrderNonLinearStagedConstruction;
                 default:
                     Engine.Base.Compute.RecordWarning("Unrecognised AnalysisType '" + analysisType + "'; defaulting to FirstOrderLinear.");
-                    return TSD.API.Remoting.Solver.AnalysisType.FirstOrderLinear;
-            }
-        }
-
-        /***************************************************/
-
-        public static TSD.API.Remoting.Loading.LoadingResultType ToTeklaStructuralDesigner(this TeklaStructuralDesignerLoadingResultType loadingResultType)
-        {
-            switch (loadingResultType)
-            {
-                case TeklaStructuralDesignerLoadingResultType.Base:
-                    return TSD.API.Remoting.Loading.LoadingResultType.Base;
-                case TeklaStructuralDesignerLoadingResultType.NotionalLoadsDirection1Positive:
-                    return TSD.API.Remoting.Loading.LoadingResultType.NotionalLoadsDirection1Positive;
-                case TeklaStructuralDesignerLoadingResultType.NotionalLoadsDirection2Positive:
-                    return TSD.API.Remoting.Loading.LoadingResultType.NotionalLoadsDirection2Positive;
-                case TeklaStructuralDesignerLoadingResultType.NotionalLoadsDirection1Negative:
-                    return TSD.API.Remoting.Loading.LoadingResultType.NotionalLoadsDirection1Negative;
-                case TeklaStructuralDesignerLoadingResultType.NotionalLoadsDirection2Negative:
-                    return TSD.API.Remoting.Loading.LoadingResultType.NotionalLoadsDirection2Negative;
-                default:
-                    Engine.Base.Compute.RecordWarning("Unrecognised LoadingResultType '" + loadingResultType + "'; defaulting to Base.");
-                    return TSD.API.Remoting.Loading.LoadingResultType.Base;
+                    return TsdAnalysisType.FirstOrderLinear;
             }
         }
 

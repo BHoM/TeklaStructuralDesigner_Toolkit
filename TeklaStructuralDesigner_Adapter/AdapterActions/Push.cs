@@ -22,14 +22,13 @@
 
 using System.Collections.Generic;
 using BH.oM.Adapter;
-using BH.oM.Base;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Public Methods                  ****/
+        /****            Public Methods                 ****/
         /***************************************************/
 
         // Push is overridden purely to fail clearly. The Tekla Structural Designer Remoting API is

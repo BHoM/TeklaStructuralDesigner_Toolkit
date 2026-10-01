@@ -134,7 +134,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         internal static string NoCases()
         {
             return "No loading cases were found in the model open in Tekla Structural Designer, so no bar results could be read. " +
-                   "Check that the model contains load combinations, and that IncludeCombinations or IncludeLoadcases is set on the pull configuration.";
+                   "Check that the model contains load combinations and has been analysed.";
         }
 
         /***************************************************/

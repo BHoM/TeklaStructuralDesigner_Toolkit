@@ -42,11 +42,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
         public int SpanIndex { get; }
         public Guid SpanId { get; }
         public IMemberSpan Span { get; }
-
-        // Span length in metres. Tekla Structural Designer reports geometry in millimetres, consistent
-        // with the N.mm units observed on forces, so this already has the 1e-3 factor applied.
-        public double LengthMetres { get; }
-
         public string LevelName { get; }
         public string ElementGroupName { get; }
         public string ParentElementGroupName { get; }
@@ -81,7 +76,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
             int spanIndex,
             Guid spanId,
             IMemberSpan span,
-            double lengthMetres,
             string levelName,
             string elementGroupName,
             string parentElementGroupName,
@@ -99,7 +93,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
             SpanIndex = spanIndex;
             SpanId = spanId;
             Span = span;
-            LengthMetres = lengthMetres;
             LevelName = levelName;
             ElementGroupName = elementGroupName;
             ParentElementGroupName = parentElementGroupName;

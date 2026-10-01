@@ -14,7 +14,7 @@ To make `PullTests.cs` runnable:
    - At least one load combination solved for `FirstOrderLinear`, and none solved for
      `SecondOrderNonLinear` (for `UnsolvedAnalysisTypeNamesTheUnsolvedCases`).
    - At least two loadcases combined with **different strength and service factors**, so that
-     `CombinationFactorSelectsADifferentFactor` can tell the two apart.
+     `CombinationsSplitIntoStrengthAndService` can tell the two apart.
    - A **full length UDL applied to that beam**, at a magnitude you have written down, for
      `PullBarLoadsAttachToBarsAndCases` and `UdlMagnitudeMatchesTheModel`. The second of those is the
      test that settles whether applied loads use the same N/mm units as results - see the toolkit

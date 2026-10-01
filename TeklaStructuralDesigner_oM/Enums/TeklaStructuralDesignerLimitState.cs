@@ -20,31 +20,17 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using BH.oM.Geometry;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    internal static partial class Convert
+    [Description("The limit state a load combination pulled from Tekla Structural Designer represents. Tekla Structural Designer holds a strength, a service and a quasi permanent service factor against every loadcase of one combination, and solves the strength and service sets separately. BHoM's LoadCombination holds one factor per loadcase, so each Tekla Structural Designer combination is pulled as one LoadCombination per limit state.")]
+    public enum TeklaStructuralDesignerLimitState
     {
-        /***************************************************/
-        /****            Public Methods                 ****/
-        /***************************************************/
+        [Description("The ultimate limit state: the combination's strength factors, and the results Tekla Structural Designer designs with. Numbered 1000 + the Tekla Structural Designer combination number.")]
+        Strength,
 
-        // A Node is a construction point. Its support, if it has one, is the one placed on that point,
-        // and its orientation that support's axis system. Construction points have no orientation of
-        // their own, so an unsupported Node keeps BHoM's default, global, orientation.
-        public static Node ToBHoM(Guid pointId, Point position, Constraint6DOF support = null, Basis orientation = null)
-        {
-            Node node = new Node { Position = position, Support = support };
-            if (orientation != null)
-                node.Orientation = orientation;
-
-            return node.SetIdentity(pointId, pointId);
-        }
-
-        /***************************************************/
+        [Description("The serviceability limit state: the combination's service factors, and the results Tekla Structural Designer checks deflection with. Numbered 2000 + the Tekla Structural Designer combination number.")]
+        Service,
     }
 }

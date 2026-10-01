@@ -51,16 +51,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             AssemblyResolver.EnsureRegistered();
 
             AdapterIdFragmentType = typeof(TeklaStructuralDesignerId);
-            SetupComparers();
-            SetupDependencies();
-
-            BH.Adapter.Modules.Structure.ModuleLoader.LoadModules(this);
-
-            if (!active)
-                return;
-
             TeklaStructuralDesignerConfig = teklaStructuralDesignerConfig ?? new TeklaStructuralDesignerConfig();
-            Connect(modelPath);
+
+            if (active)
+                Connect(modelPath);
         }
 
         /***************************************************/

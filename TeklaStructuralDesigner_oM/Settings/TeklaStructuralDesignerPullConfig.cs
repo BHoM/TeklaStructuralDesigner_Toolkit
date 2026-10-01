@@ -41,20 +41,23 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("Which route through the API is used to read bar forces. Leave as Auto unless diagnosing a discrepancy.")]
         public virtual TeklaStructuralDesignerBarForceSource BarForceSource { get; set; } = TeklaStructuralDesignerBarForceSource.Auto;
 
-        [Description("If true, load combinations are read. Tekla Structural Designer distinguishes combinations from the individual loadcases that make them up, and a schedule of design forces is normally built from combinations, so this is true by default.")]
-        public virtual bool IncludeCombinations { get; set; } = true;
+        [Description("If true, results are read for the Strength (ultimate limit state) version of every combination when a result request names no cases. True by default: a schedule of design forces is normally built from strength combinations. Cases named on the request are always read, whatever this is set to.")]
+        public virtual bool IncludeStrengthCombinations { get; set; } = true;
 
-        [Description("If true, individual loadcases are read in addition to combinations. False by default: on a real model this multiplies the number of results returned without usually being what was wanted.")]
+        [Description("If true, results are read for the Service (serviceability limit state) version of every combination when a result request names no cases. False by default, because it doubles the number of combination results returned. Cases named on the request are always read, whatever this is set to.")]
+        public virtual bool IncludeServiceCombinations { get; set; } = false;
+
+        [Description("If true, results are read for every individual loadcase when a result request names no cases. False by default: on a real model this multiplies the number of results returned without usually being what was wanted. Cases named on the request are always read, whatever this is set to.")]
         public virtual bool IncludeLoadcases { get; set; } = false;
 
         [Description("Swaps the major and minor local axes when converting forces, so that the moment Tekla Structural Designer reports about one local axis is written to the other. Only set this true if a known model demonstrates that the default mapping is transposed; see the toolkit README. Shears are swapped together with moments, because a genuine axis transposition affects both.")]
         public virtual bool SwapMajorMinorAxes { get; set; } = false;
 
-        [Description("Which of Tekla Structural Designer's three per loadcase factors is written into a pulled LoadCombination. Only affects pulling LoadCombination objects; it has no bearing on results, which Tekla Structural Designer has already combined internally.")]
-        public virtual TeklaStructuralDesignerCombinationFactor CombinationFactor { get; set; } = TeklaStructuralDesignerCombinationFactor.Strength;
-
         [Description("If true, loads that Tekla Structural Designer generated rather than a user applied - decomposed slab and wind loads, solver loads, loads arriving from an incoming element - are pulled alongside the applied loads. False by default: a decomposed load is the same loading already described by the slab load it came from, so pulling both double counts it. Set this true when you want what actually acts on the members rather than what was drawn.")]
         public virtual bool IncludeDerivedLoads { get; set; } = false;
+
+        [Description("If true, composite and precast slabs are pulled as the BHoM surface property nearest to them: a SlabOnDeck built from the deck profile, or a HollowCore or ConstantThickness plank wrapped in a ToppedSlab where the topping is structural. False by default, because the Robot and ETABS toolkits cannot push those types - Robot fails and ETABS creates nothing - so every slab is instead pulled as a ConstantThickness of its overall depth, with the deck or plank kept in the property name. Set this true only for a package or workflow that understands the detailed types.")]
+        public virtual bool DetailedSurfaceProperties { get; set; } = false;
 
         /***************************************************/
     }

@@ -114,6 +114,11 @@
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
+    <Reference Include="Library_Engine">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Library_Engine.dll</HintPath>
+      <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
     <Reference Include="Physical_oM">
       <HintPath>$(ProgramData)\BHoM\Assemblies\Physical_oM.dll</HintPath>
       <Private>False</Private>
@@ -121,6 +126,11 @@
     </Reference>
     <Reference Include="Quantities_oM">
       <HintPath>$(ProgramData)\BHoM\Assemblies\Quantities_oM.dll</HintPath>
+      <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+    <Reference Include="Spatial_Engine">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Spatial_Engine.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>

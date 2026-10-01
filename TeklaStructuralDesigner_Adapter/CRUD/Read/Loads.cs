@@ -4,25 +4,26 @@
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
- *
- *
- * The BHoM is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3.0 of the License, or
- * (at your option) any later version.
- *
- * The BHoM is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
+ *                                           
+ *                                                                              
+ * The BHoM is free software: you can redistribute it and/or modify         
+ * it under the terms of the GNU Lesser General Public License as published by  
+ * the Free Software Foundation, either version 3.0 of the License, or          
+ * (at your option) any later version.                                          
+ *                                                                              
+ * The BHoM is distributed in the hope that it will be useful,              
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of               
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                 
+ * GNU Lesser General Public License for more details.                          
+ *                                                                            
+ * You should have received a copy of the GNU Lesser General Public License     
+ * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BH.Engine.Base;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Structure.Elements;
 using BH.oM.Structure.Loads;
@@ -45,10 +46,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // Loads hang off loadcases in Tekla Structural Designer - there is no model wide load list -
-        // so this is one GetLoadsAsync call per loadcase, asking for member and nodal loads together.
-        // Every other load type is left alone: slab, perimeter, snow, wind, temperature and settlement
-        // loads act on surfaces and areas this adapter does not read, so there would be nothing to
-        // attach them to.
+        // so this is one GetLoadsAsync call per loadcase, asking for member, nodal and planar loads
+        // together. Planar loads - area, patch and line loads on slabs, walls, roofs, wind walls and
+        // construction planes - are converted in AreaLoads.cs. Snow, diaphragm, temperature and
+        // settlement loads are not read: snow loads are generated from roof geometry and reach the
+        // frame as derived member loads, and the others have no BHoM element to attach to here.
         //
         // Read in one pass and converted in a second, rather than converted as they arrive, so that
         // every construction point a nodal load references can be resolved in a single batched call
@@ -59,16 +61,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
 
-            List<ILoadcase> tsdLoadcases;
-            try
-            {
-                tsdLoadcases = Async.RunSync(ct => m_Model.GetLoadcasesAsync(null, ct), timeout, "reading loadcases").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read loadcases from Tekla Structural Designer, so no loads could be read. " + e.Message);
-                return new List<BHoMLoad>();
-            }
+            List<ILoadcase> tsdLoadcases = ReadTsdLoadcases(timeout, "so no loads could be read");
+            Dictionary<Guid, Loadcase> loadcaseById = BHoMLoadcases(tsdLoadcases);
 
             // Pass one: every load, paired with the BHoM Loadcase it belongs to.
             List<PendingLoad> pending = new List<PendingLoad>();
@@ -76,13 +70,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             foreach (ILoadcase tsdLoadcase in tsdLoadcases)
             {
-                Loadcase loadcase = tsdLoadcase.ToBHoM(Identifier(tsdLoadcase.Name, tsdLoadcase.UserName, tsdLoadcase.Index));
+                Loadcase loadcase = loadcaseById[tsdLoadcase.Id];
 
                 List<TsdLoad> tsdLoads;
                 try
                 {
                     tsdLoads = Async.RunSync(
-                        ct => tsdLoadcase.GetLoadsAsync(new[] { TsdLoadType.Member, TsdLoadType.Nodal }, ct),
+                        ct => tsdLoadcase.GetLoadsAsync(m_PulledLoadTypes, ct),
                         timeout, "reading loads for case '" + loadcase.Name + "'").ToList();
                 }
                 catch (Exception e)
@@ -113,7 +107,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<BHoMLoad>();
 
             // Pass two: resolve what the loads point at, then convert.
-            Dictionary<Guid, Bar> barBySpanId = BarsBySpanId();
+            Dictionary<Guid, Bar> barBySpanId = pending.Any(p => p.Load is IMemberLoad) ? BarsBySpanId() : new Dictionary<Guid, Bar>();
 
             HashSet<int> pointIndices = new HashSet<int>(
                 pending.Select(p => p.Load).OfType<INodalLoad>().Select(n => n.PointIndex));
@@ -174,6 +168,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
             }
 
+            loads.AddRange(ReadPlanarLoads(pending.Where(p => p.Load is IPlanarLoad).ToList(), skipReasons, timeout));
+
             foreach (KeyValuePair<string, int> reason in skipReasons)
                 Engine.Base.Compute.RecordWarning(reason.Value + " load(s) were skipped because " + reason.Key + ".");
 
@@ -183,21 +179,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     "consistent with the units its results use. If pulled loads are out by a factor of a thousand against the model, that assumption does not hold for applied loads - see Convert/ToBHoM/Load.cs.");
             }
 
-            return FilterByType(loads, type);
-        }
-
-        /***************************************************/
-
-        private static List<BHoMLoad> FilterByType(List<BHoMLoad> loads, Type type)
-        {
             // typeof(ILoad), or any other base the loads share, means "everything you have".
-            if (type == null || type == typeof(BHoMLoad))
-                return loads;
-
-            return loads.Where(l => type.IsAssignableFrom(l.GetType())).ToList();
+            return type == null || type == typeof(BHoMLoad) ? loads : loads.FilterByType(type).Cast<BHoMLoad>().ToList();
         }
 
         /***************************************************/
+
 
         // Identical reasons are counted and reported once. A model can carry thousands of loads, and
         // one warning per skipped load would bury the rest of the pull's output.
@@ -216,26 +203,24 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // Bars keyed by the span Guid a member load refers to. Spans whose ends do not resolve to
         // construction points are left out, exactly as ReadBars leaves them out - a load against one of
         // those is then reported as unmatched rather than attached to a Bar with no geometry.
+        //
+        // These Bars only identify what a load acts on, so supports are not read for them and the
+        // section summary is not reported: pulling loads should not repeat what pulling Bars says.
         private Dictionary<Guid, Bar> BarsBySpanId()
         {
             List<TsdSpanIdentity> spans = BuildSpanIdentities(TeklaStructuralDesignerConfig.TimeoutSeconds);
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
+            BarPropertyCache cache = new BarPropertyCache();
 
             Dictionary<Guid, Bar> result = new Dictionary<Guid, Bar>();
 
             foreach (TsdSpanIdentity span in spans)
             {
-                if (span.SpanId == Guid.Empty || result.ContainsKey(span.SpanId))
+                Bar bar;
+                if (span.SpanId == Guid.Empty || result.ContainsKey(span.SpanId) || !TryBuildBar(span, nodeById, cache, out bar))
                     continue;
 
-                Node start, end;
-                if (span.StartPointId == Guid.Empty || span.EndPointId == Guid.Empty ||
-                    !nodeById.TryGetValue(span.StartPointId, out start) || !nodeById.TryGetValue(span.EndPointId, out end))
-                {
-                    continue;
-                }
-
-                result[span.SpanId] = span.ToBHoM(start, end);
+                result[span.SpanId] = bar;
             }
 
             return result;

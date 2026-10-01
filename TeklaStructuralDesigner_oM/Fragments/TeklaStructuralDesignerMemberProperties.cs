@@ -57,10 +57,10 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("Name of the element group containing the group named by ElementGroupName. Empty if that group has no parent.")]
         public virtual string ParentElementGroupName { get; set; } = "";
 
-        [Description("Material grade of the span as named in Tekla Structural Designer, for example 'S355'. Retained verbatim because the BHoM material fragment derived from it is lossy.")]
+        [Description("Material grade of the span as named in Tekla Structural Designer, for example 'S355'. Retained verbatim, since the Bar's material may be a BHoM library material whose name differs slightly.")]
         public virtual string MaterialGrade { get; set; } = "";
 
-        [Description("Section name of the span as named in Tekla Structural Designer, for example 'UB 457x191x67'. Retained verbatim because the BHoM section derived from it carries no profile geometry.")]
+        [Description("Section name of the span as named in Tekla Structural Designer, for example 'UB 457x191x67'. Retained verbatim, since the Bar's section may be a BHoM library section whose name differs slightly.")]
         public virtual string SectionName { get; set; } = "";
 
         [Description("Construction type of the member in Tekla Structural Designer, for example 'SteelBeam' or 'SteelBrace'.")]

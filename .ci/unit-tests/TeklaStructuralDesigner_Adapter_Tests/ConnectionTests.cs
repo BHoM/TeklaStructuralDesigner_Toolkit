@@ -20,6 +20,7 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
+using System.Linq;
 using BH.Adapter.TeklaStructuralDesigner;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Structure.Elements;
@@ -27,7 +28,6 @@ using BH.oM.Structure.Requests;
 using BH.oM.Structure.Results;
 using NUnit.Framework;
 using Shouldly;
-using System.Linq;
 
 namespace BH.Tests.Adapter.TeklaStructuralDesigner
 {
@@ -36,20 +36,23 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
         /**** Public Tests - these run without Tekla    ****/
         /**** Structural Designer being installed or    ****/
-        /**** running, and are exercised by CI.          ****/
+        /**** running, and are exercised by CI.         ****/
         /***************************************************/
 
         [Test]
-        [Description("An adapter created with active = false must not attempt to connect, and its comparer and dependency setup must still have run.")]
+        [Description("An adapter created with active = false must not attempt to connect, must keep the configuration it was given, and must still identify its objects with a TeklaStructuralDesignerId.")]
         public void InactiveAdapterConstructsWithoutConnecting()
         {
-            TeklaStructuralDesignerAdapter adapter = new TeklaStructuralDesignerAdapter();
+            TeklaStructuralDesignerConfig config = new TeklaStructuralDesignerConfig { TimeoutSeconds = 42 };
+            BH.Engine.Base.Compute.ClearCurrentEvents();
+
+            TeklaStructuralDesignerAdapter adapter = new TeklaStructuralDesignerAdapter("", config, false);
 
             adapter.AdapterIdFragmentType.ShouldBe(typeof(TeklaStructuralDesignerId));
-            adapter.AdapterComparers.ShouldNotBeNull();
-            adapter.AdapterComparers.Count.ShouldBeGreaterThan(0);
-            adapter.DependencyTypes.ShouldNotBeNull();
-            adapter.DependencyTypes.Count.ShouldBeGreaterThan(0);
+            adapter.TeklaStructuralDesignerConfig.ShouldBeSameAs(config);
+            BH.Engine.Base.Query.CurrentEvents()
+                .Any(e => e.Type == BH.oM.Base.Debugging.EventType.Error)
+                .ShouldBeFalse();
         }
 
         /***************************************************/
@@ -58,6 +61,11 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         [Description("Requesting active = true with no Tekla Structural Designer instance running must record exactly one clear error and must not throw.")]
         public void ActiveAdapterWithNoRunningInstanceRecordsOneError()
         {
+            // On a developer machine with Tekla Structural Designer open the adapter connects, so there
+            // is nothing to test; report that rather than fail.
+            bool running = TSD.API.Remoting.ApplicationFactory.GetRunningApplicationsAsync(System.Threading.CancellationToken.None).GetAwaiter().GetResult().Any();
+            Assume.That(running, Is.False, "Tekla Structural Designer is running, so the no-instance path cannot be exercised.");
+
             BH.Engine.Base.Compute.ClearCurrentEvents();
 
             TeklaStructuralDesignerAdapter adapter = null;
@@ -101,6 +109,9 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
             var results = adapter.ReadResults(new BarResultRequest { ResultType = BarResultType.BarForce }).ToList();
 
             results.Count.ShouldBe(0);
+            BH.Engine.Base.Query.CurrentEvents()
+                .Any(e => e.Type == BH.oM.Base.Debugging.EventType.Warning)
+                .ShouldBeTrue();
         }
 
         /***************************************************/

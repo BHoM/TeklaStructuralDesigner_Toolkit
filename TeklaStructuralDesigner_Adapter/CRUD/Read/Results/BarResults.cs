@@ -29,6 +29,7 @@ using BH.oM.Analytical.Results;
 using BH.oM.Structure.Requests;
 using BH.oM.Structure.Results;
 using TSD.API.Remoting.Loading;
+using TsdAnalysisType = TSD.API.Remoting.Solver.AnalysisType;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -78,7 +79,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<BarForce>();
             }
 
-            List<TsdLoadingCaseIdentity> allCases = BuildLoadingCaseIdentities(config, timeoutSeconds);
+            List<TsdLoadingCaseIdentity> allCases = BuildLoadingCaseIdentities(timeoutSeconds);
             if (allCases.Count == 0)
             {
                 Engine.Base.Compute.RecordError(ErrorMessages.NoCases());
@@ -89,7 +90,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (spans.Count == 0)
                 return new List<BarForce>();       // FilterSpans has already recorded why.
 
-            List<TsdLoadingCaseIdentity> cases = FilterCases(allCases, request.Cases);
+            List<TsdLoadingCaseIdentity> cases = FilterCases(allCases, request.Cases, config);
             if (cases.Count == 0)
                 return new List<BarForce>();       // FilterCases has already recorded why.
 
@@ -164,29 +165,23 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return true;
 
             BarForce solverStart = solverResults.FirstOrDefault(r =>
-                Equals(r.ObjectId, checkSpan.ObjectId) && Equals(r.ResultCase, checkCase.Identifier) && Math.Abs(r.Position) < 1e-6);
+                Equals(r.ObjectId, checkSpan.ObjectId) && Equals(r.ResultCase, checkCase.Number) && Math.Abs(r.Position) < 1e-6);
             if (solverStart == null)
                 return true;        // Nothing to compare for this particular pair; do not fail the whole read over it.
 
-            TSD.API.Remoting.Solver.AnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
-            LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
+            string failure;
+            IForce3DLocal spanEndForce = ReadSpanEndForce(checkSpan, 0, checkCase, config.AnalysisType.ToTeklaStructuralDesigner(), config.LoadingResultType.ToTeklaStructuralDesigner(), timeoutSeconds, out failure);
 
-            IForce3DLocal spanEndForce;
-            try
+            if (failure != null)
             {
-                spanEndForce = Async.RunSync(
-                    ct => checkSpan.Span.GetEndForceAsync(0, analysisType, checkCase.Id, loadingResultType, ct),
-                    timeoutSeconds, "cross-checking bar forces");
-            }
-            catch (Exception)
-            {
-                return true;         // Could not run the cross check; proceed with the fast route rather than fail the pull over a diagnostic step.
+                Engine.Base.Compute.RecordWarning("The bar forces from the solver route could not be cross-checked against a span end force, so they have been trusted unverified. " + failure);
+                return true;
             }
 
             if (spanEndForce == null)
                 return true;
 
-            BarForce reference = spanEndForce.ToBHoM(checkSpan.ObjectId, checkCase.Identifier, 0.0, 2, config.SwapMajorMinorAxes);
+            BarForce reference = spanEndForce.ToBHoM(checkSpan.ObjectId, checkCase.Number, 0.0, 2, config.SwapMajorMinorAxes);
 
             const double tolerance = 1.0; // 1 N / 1 N.m: a sanity check on route agreement, not a precision comparison.
             return Close(solverStart.FX, reference.FX, tolerance) && Close(solverStart.FY, reference.FY, tolerance) &&

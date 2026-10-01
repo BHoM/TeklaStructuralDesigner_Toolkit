@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BH.Engine.Base;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Structure.Loads;
 
@@ -32,7 +33,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
     {
         /***************************************************/
         /****            Private Methods                ****/
-        /****            (Result request filtering)      ****/
+        /****            (Result request filtering)     ****/
         /***************************************************/
 
         // An empty or null ObjectIds means "every span". Otherwise, each requested item can be the
@@ -44,7 +45,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (objectIds == null || objectIds.Count == 0)
                 return spans;
 
-            Dictionary<string, TsdSpanIdentity> byObjectId = spans.ToDictionary(s => s.ObjectId, StringComparer.OrdinalIgnoreCase);
+            List<IGrouping<string, TsdSpanIdentity>> groups = spans.GroupBy(s => s.ObjectId, StringComparer.OrdinalIgnoreCase).ToList();
+            Dictionary<string, TsdSpanIdentity> byObjectId = groups.ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            List<string> duplicated = groups.Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+            if (duplicated.Count > 0)
+            {
+                Engine.Base.Compute.RecordWarning(duplicated.Count + " span identifier(s) are shared by more than one member, and only the first span of each has been read: " +
+                    string.Join(", ", duplicated.Take(10)) + (duplicated.Count > 10 ? ", ..." : "") + ".");
+            }
 
             List<TsdSpanIdentity> matched = new List<TsdSpanIdentity>();
             List<string> unmatched = new List<string>();
@@ -99,15 +108,36 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // An empty or null Cases means "every requested loading case type" (combinations by default).
-        // Each requested item can be the Guid TSD uses internally, the identifier string ResultCase
-        // would carry (name, user name, or index), or a BHoM Loadcase/LoadCombination object.
-        private List<TsdLoadingCaseIdentity> FilterCases(List<TsdLoadingCaseIdentity> cases, List<object> requestedCases)
+        // Which cases a result request reads.
+        //
+        // With no cases named, the pull configuration decides: the Strength combinations by default,
+        // plus the Service combinations and the loadcases if their Include flags are set.
+        //
+        // Named cases are always read, whatever the flags say, and each can be given as:
+        //  - a Loadcase or LoadCombination pulled from this adapter - matched on the Guid its results
+        //    are read with (TeklaStructuralDesignerId.PersistentId), then on its Number, then its Name;
+        //  - a case number, as a number or as text - 1048 is the Strength and 2048 the Service version
+        //    of Tekla Structural Designer combination 48, and 48 alone is loadcase 48;
+        //  - a case name, exactly as pulled - 'Strength 48 ...', 'Service 48 ...' or a loadcase name;
+        //  - the Guid Tekla Structural Designer uses internally.
+        // Numbers are unique across loadcases, Strength and Service combinations (see Engine
+        // Query.CaseNumber), so no request can land on the wrong limit state or on a loadcase by mistake.
+        private List<TsdLoadingCaseIdentity> FilterCases(List<TsdLoadingCaseIdentity> cases, List<object> requestedCases, TeklaStructuralDesignerPullConfig config)
         {
             if (requestedCases == null || requestedCases.Count == 0)
             {
-                Engine.Base.Compute.RecordNote("No specific loading cases were requested; every combination (or loadcase, per the pull configuration) has been read.");
-                return cases;
+                List<TsdLoadingCaseIdentity> byConfig = cases.Where(c =>
+                    c.LimitState == TeklaStructuralDesignerLimitState.Strength ? config.IncludeStrengthCombinations :
+                    c.LimitState == TeklaStructuralDesignerLimitState.Service ? config.IncludeServiceCombinations :
+                    config.IncludeLoadcases).ToList();
+
+                Engine.Base.Compute.RecordNote("No specific loading cases were requested, so results have been read for " + IncludedDescription(config) +
+                    ". Name cases on the request, or set the Include flags on the pull configuration, to read others.");
+
+                if (byConfig.Count == 0)
+                    Engine.Base.Compute.RecordError("The pull configuration excludes every loading case: set at least one of IncludeStrengthCombinations, IncludeServiceCombinations or IncludeLoadcases.");
+
+                return byConfig;
             }
 
             Dictionary<Guid, TsdLoadingCaseIdentity> byId = cases
@@ -115,26 +145,32 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 .GroupBy(c => c.Id)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            Dictionary<string, TsdLoadingCaseIdentity> byIdentifier = cases
-                .GroupBy(c => c.Identifier, StringComparer.OrdinalIgnoreCase)
+            Dictionary<int, TsdLoadingCaseIdentity> byNumber = cases
+                .GroupBy(c => c.Number)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            Dictionary<string, TsdLoadingCaseIdentity> byName = cases
+                .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+                .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             List<TsdLoadingCaseIdentity> matched = new List<TsdLoadingCaseIdentity>();
+            HashSet<TsdLoadingCaseIdentity> seen = new HashSet<TsdLoadingCaseIdentity>();
             List<string> unmatched = new List<string>();
 
             foreach (object requested in requestedCases)
             {
-                TsdLoadingCaseIdentity found = MatchCase(requested, byId, byIdentifier);
-                if (found != null)
-                    matched.Add(found);
-                else
+                TsdLoadingCaseIdentity found = MatchCase(requested, byId, byNumber, byName);
+                if (found == null)
                     unmatched.Add(CaseDescription(requested));
+                else if (seen.Add(found))
+                    matched.Add(found);
             }
 
             if (unmatched.Count > 0)
             {
                 string message = "Could not match " + unmatched.Count + " of " + requestedCases.Count +
-                    " requested loading case(s). Accepted forms are the case's Guid, its name or number, or a Loadcase/LoadCombination object. Unmatched: " +
+                    " requested loading case(s). Accepted forms are a Loadcase or LoadCombination pulled from this adapter, its Number (1000 + n for Strength and 2000 + n for Service combination n), its Name, or its Guid. Unmatched: " +
                     string.Join(", ", unmatched.Take(10)) + (unmatched.Count > 10 ? ", ..." : "");
 
                 if (matched.Count == 0)
@@ -148,39 +184,73 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        private static TsdLoadingCaseIdentity MatchCase(object requested, Dictionary<Guid, TsdLoadingCaseIdentity> byId, Dictionary<string, TsdLoadingCaseIdentity> byIdentifier)
+        private static string IncludedDescription(TeklaStructuralDesignerPullConfig config)
         {
-            if (requested == null)
-                return null;
+            List<string> included = new List<string>();
+            if (config.IncludeStrengthCombinations)
+                included.Add("every Strength combination");
+            if (config.IncludeServiceCombinations)
+                included.Add("every Service combination");
+            if (config.IncludeLoadcases)
+                included.Add("every loadcase");
 
-            if (requested is Guid)
-            {
-                TsdLoadingCaseIdentity found;
-                return byId.TryGetValue((Guid)requested, out found) ? found : null;
-            }
-
-            LoadCombination asCombination = requested as LoadCombination;
-            if (asCombination != null)
-                return MatchByNameOrNumber(asCombination.Name, asCombination.Number, byIdentifier);
-
-            Loadcase asLoadcase = requested as Loadcase;
-            if (asLoadcase != null)
-                return MatchByNameOrNumber(asLoadcase.Name, asLoadcase.Number, byIdentifier);
-
-            string asString = requested.ToString();
-            TsdLoadingCaseIdentity byString;
-            return byIdentifier.TryGetValue(asString, out byString) ? byString : null;
+            return included.Count == 0 ? "no cases" : string.Join(" and ", included);
         }
 
         /***************************************************/
 
-        private static TsdLoadingCaseIdentity MatchByNameOrNumber(string name, int number, Dictionary<string, TsdLoadingCaseIdentity> byIdentifier)
+        private static TsdLoadingCaseIdentity MatchCase(object requested, Dictionary<Guid, TsdLoadingCaseIdentity> byId, Dictionary<int, TsdLoadingCaseIdentity> byNumber, Dictionary<string, TsdLoadingCaseIdentity> byName)
         {
+            if (requested == null)
+                return null;
+
             TsdLoadingCaseIdentity found;
-            if (!string.IsNullOrWhiteSpace(name) && byIdentifier.TryGetValue(name, out found))
+
+            if (requested is Guid)
+                return byId.TryGetValue((Guid)requested, out found) ? found : null;
+
+            ICase asCase = requested as ICase;
+            if (asCase != null)
+            {
+                // The Guid on the case's own id fragment is the one its results are read with, so it
+                // is the most exact match there is.
+                TeklaStructuralDesignerId id = ((BH.oM.Base.IBHoMObject)asCase).FindFragment<TeklaStructuralDesignerId>();
+                if (id != null && id.PersistentId is Guid && byId.TryGetValue((Guid)id.PersistentId, out found))
+                    return found;
+
+                if (byNumber.TryGetValue(asCase.Number, out found))
+                    return found;
+
+                return !string.IsNullOrWhiteSpace(asCase.Name) && byName.TryGetValue(asCase.Name.Trim(), out found) ? found : null;
+            }
+
+            Guid parsed;
+            if (Guid.TryParse(requested.ToString(), out parsed))
+                return byId.TryGetValue(parsed, out found) ? found : null;
+
+            int? number = AsCaseNumber(requested);
+            if (number.HasValue && byNumber.TryGetValue(number.Value, out found))
                 return found;
 
-            return byIdentifier.TryGetValue(number.ToString(), out found) ? found : null;
+            return byName.TryGetValue(requested.ToString().Trim(), out found) ? found : null;
+        }
+
+        /***************************************************/
+
+        // A requested case given as a number: any whole number type, or text that is a whole number.
+        private static int? AsCaseNumber(object requested)
+        {
+            if (requested is int)
+                return (int)requested;
+
+            if (requested is long || requested is short || requested is double || requested is float || requested is decimal)
+            {
+                double value = System.Convert.ToDouble(requested);
+                return Math.Abs(value - Math.Round(value)) < 1e-9 ? (int?)(int)Math.Round(value) : null;
+            }
+
+            int parsed;
+            return int.TryParse(requested.ToString().Trim(), out parsed) ? parsed : (int?)null;
         }
 
         /***************************************************/

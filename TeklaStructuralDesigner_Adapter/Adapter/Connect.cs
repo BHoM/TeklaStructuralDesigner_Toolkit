@@ -38,11 +38,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /****            Private Fields                 ****/
         /***************************************************/
 
-        private IApplication m_Application;
-        private IDocument m_Document;
         private IModel m_Model;
-        private string m_ModelPath = "";
-        private string m_VersionString = "";
 
         /***************************************************/
         /****            Private Methods                ****/
@@ -133,17 +129,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return;
             }
 
-            m_Application = chosen.Application;
-            m_Document = chosen.Document;
             m_Model = model;
-            m_ModelPath = chosen.Path;
-            m_VersionString = chosen.Version;
 
             // Always report which instance was actually bound. Cheap, and it is what makes "the adapter
             // read from the wrong model" a self-diagnosing class of bug instead of a silent one.
             Engine.Base.Compute.RecordNote(
-                "Connected to Tekla Structural Designer " + m_VersionString + ", model '" + m_ModelPath +
-                "' (ModelId " + m_Document.ModelId + ").");
+                "Connected to Tekla Structural Designer " + chosen.Version + ", model '" + chosen.Path +
+                "' (ModelId " + chosen.Document.ModelId + ").");
         }
 
         /***************************************************/

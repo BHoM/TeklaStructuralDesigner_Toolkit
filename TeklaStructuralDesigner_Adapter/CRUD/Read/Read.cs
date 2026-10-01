@@ -48,11 +48,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<IBHoMObject>();
             }
 
+            if (m_Model == null)
+            {
+                Engine.Base.Compute.RecordWarning(ErrorMessages.NotConnected());
+                return new List<IBHoMObject>();
+            }
+
+            TeklaStructuralDesignerPullConfig config = PullConfigOrDefault(actionConfig);
+
             if (type == typeof(Bar))
                 return ReadBars(ids).Cast<IBHoMObject>();
 
             if (type == typeof(Node))
                 return ReadNodes(ids).Cast<IBHoMObject>();
+
+            if (type == typeof(Panel))
+                return ReadPanels(ids, config).Cast<IBHoMObject>();
 
             if (typeof(IResult).IsAssignableFrom(type))
             {
@@ -62,18 +73,16 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<IBHoMObject>();
             }
 
-            TeklaStructuralDesignerPullConfig config = PullConfigOrDefault(actionConfig);
-
             if (type == typeof(Loadcase))
                 return ReadLoadcases(ids).Cast<IBHoMObject>();
 
             if (type == typeof(LoadCombination))
-                return ReadLoadCombinations(ids, config).Cast<IBHoMObject>();
+                return ReadLoadCombinations(ids).Cast<IBHoMObject>();
 
             // ICase asked for on its own means both kinds of case, which is what a caller filtering on
             // the interface rather than on a concrete type is asking for.
             if (type == typeof(ICase))
-                return ReadLoadcases(ids).Cast<IBHoMObject>().Concat(ReadLoadCombinations(ids, config).Cast<IBHoMObject>());
+                return ReadLoadcases(ids).Cast<IBHoMObject>().Concat(ReadLoadCombinations(ids).Cast<IBHoMObject>());
 
             // Loads are matched on assignability rather than equality, so that ILoad returns every
             // supported load and a concrete type returns just that one. The ids of a load request are
@@ -87,7 +96,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return ReadLoads(type, config).Cast<IBHoMObject>();
             }
 
-            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Loadcases, LoadCombinations, bar and nodal loads, and bar forces; use a BarResultRequest to pull bar forces.");
+            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, and bar forces; use a BarResultRequest to pull bar forces.");
             return new List<IBHoMObject>();
         }
 
@@ -96,17 +105,31 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // Shared by every read that takes settings, so that a caller who passes the wrong kind of
-        // ActionConfig is told once, in the same words, wherever it happened.
+        // ActionConfig is told once, in the same words, wherever it happened. A plain ActionConfig is
+        // not the wrong kind: it is what the BHoM UIs pass when no configuration is given, so it means
+        // "defaults" and is taken silently.
         private static TeklaStructuralDesignerPullConfig PullConfigOrDefault(ActionConfig actionConfig)
         {
             TeklaStructuralDesignerPullConfig config = actionConfig as TeklaStructuralDesignerPullConfig;
             if (config != null)
                 return config;
 
-            if (actionConfig != null)
-                Engine.Base.Compute.RecordWarning("The supplied ActionConfig is not a TeklaStructuralDesignerPullConfig; default pull settings have been used instead.");
+            if (actionConfig != null && actionConfig.GetType() != typeof(ActionConfig))
+                Engine.Base.Compute.RecordWarning("The supplied " + actionConfig.GetType().Name + " is not a TeklaStructuralDesignerPullConfig; default pull settings have been used instead.");
 
             return new TeklaStructuralDesignerPullConfig();
+        }
+
+        /***************************************************/
+
+        // The ids of a request as a case insensitive set of trimmed strings, or null when the request
+        // names none - which every reader takes as "everything".
+        private static HashSet<string> RequestedIds(IList ids)
+        {
+            if (ids == null || ids.Count == 0)
+                return null;
+
+            return new HashSet<string>(ids.Cast<object>().Where(id => id != null).Select(id => id.ToString().Trim()), StringComparer.OrdinalIgnoreCase);
         }
 
         /***************************************************/

@@ -29,6 +29,7 @@ using TSD.API.Remoting.Common;
 using TSD.API.Remoting.Loading;
 using TSD.API.Remoting.Solver;
 using TSD.API.Remoting.Structure;
+using TsdAnalysisType = TSD.API.Remoting.Solver.AnalysisType;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -42,19 +43,18 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // One call per requested loading case returns the end forces of every solver element in the
         // model at once (Analysis3DResults.GetEndForcesAsync with indices = null). On a model with
         // thousands of spans and dozens of combinations that is the difference between a few dozen
-        // calls and hundreds of thousands, which is why this is the default route
-        // (TeklaStructuralDesignerBarForceSource.Solver / Auto).
+        // calls and hundreds of thousands, which is why the default route (Auto) tries this first.
         //
         // The cost is granularity: results land at solver element boundaries, which can be finer than
-        // a span (a span may be more than one solver element) but are not guaranteed to align with
-        // BHoM's own station numbering for anything except the two ends. Interior stations from this
-        // route are therefore reported at the position the solver actually computed, not at evenly
-        // spaced fractions.
+        // a span (a span may be more than one solver element). The solver API exposes no geometry for
+        // its elements, so where a span is more than one element the interior stations are reported at
+        // evenly spaced fractions by element order - exact only where the elements are of equal
+        // length. The two ends are always exact.
         private List<BarForce> BarForcesFromSolver(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, bool endsOnly, int timeoutSeconds)
         {
             List<BarForce> results = new List<BarForce>();
 
-            TSD.API.Remoting.Solver.AnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
+            TsdAnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
             LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
 
             List<TSD.API.Remoting.Solver.IModel> solverModels;
@@ -90,30 +90,37 @@ namespace BH.Adapter.TeklaStructuralDesigner
             // Group solver elements by the span they belong to, in along-span order. Ascending solver
             // Index is assumed to follow the span from start to end; the Auto cross check in
             // BarResults.cs verifies this against the proven per span end route before it is trusted.
-            Dictionary<Guid, List<IElement1D>> elementsBySpanId = new Dictionary<Guid, List<IElement1D>>();
+            // A solver element is traced back to its span by the member's index and the span's index
+            // within it, not by the span's Guid: Tekla Structural Designer 2026 leaves both the span and
+            // the member Guid on SourceSubEntityInfo empty (checked on a live model - 972 of 972 solver
+            // elements had empty Guids, and every one of them had a valid member and span index). Keyed
+            // by Guid, every element was skipped and this route silently returned nothing.
+            Dictionary<Tuple<int, int>, List<IElement1D>> elementsBySpan = new Dictionary<Tuple<int, int>, List<IElement1D>>();
             foreach (IElement1D element in elements)
             {
                 SubEntityInfo source = element.SourceSubEntityInfo;
-                if (source.Type != SubEntityType.Span || source.Id == Guid.Empty)
+                if (source.Type != SubEntityType.Span || source.EntityType != EntityType.Member)
                     continue;
 
+                Tuple<int, int> key = Tuple.Create(source.EntityIndex, source.Index);
                 List<IElement1D> list;
-                if (!elementsBySpanId.TryGetValue(source.Id, out list))
+                if (!elementsBySpan.TryGetValue(key, out list))
                 {
                     list = new List<IElement1D>();
-                    elementsBySpanId[source.Id] = list;
+                    elementsBySpan[key] = list;
                 }
                 list.Add(element);
             }
 
-            foreach (List<IElement1D> list in elementsBySpanId.Values)
+            foreach (List<IElement1D> list in elementsBySpan.Values)
                 list.Sort((a, b) => a.Index.CompareTo(b.Index));
 
-            Dictionary<Guid, TsdSpanIdentity> spanBySpanId = new Dictionary<Guid, TsdSpanIdentity>();
+            Dictionary<Tuple<int, int>, TsdSpanIdentity> spanByKey = new Dictionary<Tuple<int, int>, TsdSpanIdentity>();
             foreach (TsdSpanIdentity span in spans)
             {
-                if (!spanBySpanId.ContainsKey(span.SpanId))
-                    spanBySpanId[span.SpanId] = span;
+                Tuple<int, int> key = Tuple.Create(span.MemberIndex, span.SpanIndex);
+                if (!spanByKey.ContainsKey(key))
+                    spanByKey[key] = span;
             }
 
             IAnalysisResults analysisResults;
@@ -162,23 +169,25 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 {
                     endForces = Async.RunSync(
                         ct => analysis3D.GetEndForcesAsync(loadingCase.Id, loadingResultType, null, ct),
-                        timeoutSeconds, "reading end forces for case '" + loadingCase.Identifier + "'");
+                        timeoutSeconds, "reading end forces for case '" + loadingCase + "'");
                 }
                 catch (Exception e)
                 {
-                    Engine.Base.Compute.RecordWarning("Failed to read end forces for case '" + loadingCase.Identifier + "'; it has been skipped. " + e.Message);
+                    Engine.Base.Compute.RecordWarning("Failed to read end forces for case '" + loadingCase + "'; it has been skipped. " + e.Message);
                     continue;
                 }
 
-                Dictionary<int, IElementEndForces> forceByElementIndex = endForces.ToDictionary(f => f.ElementIndex);
+                Dictionary<int, IElementEndForces> forceByElementIndex = endForces
+                    .GroupBy(f => f.ElementIndex)
+                    .ToDictionary(g => g.Key, g => g.First());
 
-                foreach (KeyValuePair<Guid, List<IElement1D>> spanElements in elementsBySpanId)
+                foreach (KeyValuePair<Tuple<int, int>, List<IElement1D>> spanElements in elementsBySpan)
                 {
                     TsdSpanIdentity span;
-                    if (!spanBySpanId.TryGetValue(spanElements.Key, out span))
+                    if (!spanByKey.TryGetValue(spanElements.Key, out span))
                         continue; // Not one of the spans this read is scoped to.
 
-                    AddSpanResults(results, spanElements.Value, forceByElementIndex, span, loadingCase.Identifier, config.SwapMajorMinorAxes, endsOnly);
+                    AddSpanResults(results, spanElements.Value, forceByElementIndex, span, loadingCase.Number, config.SwapMajorMinorAxes, endsOnly);
                 }
             }
 
@@ -192,7 +201,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             List<IElement1D> spanElements,
             Dictionary<int, IElementEndForces> forceByElementIndex,
             TsdSpanIdentity span,
-            string resultCase,
+            int resultCase,
             bool swapMajorMinorAxes,
             bool endsOnly)
         {
@@ -257,7 +266,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             if (unsolved.Count > 0)
             {
-                string names = string.Join(", ", unsolved.Take(10).Select(c => c.Identifier));
+                string names = string.Join(", ", unsolved.Take(10).Select(c => c.ToString()));
                 if (unsolved.Count > 10)
                     names += ", ...";
 

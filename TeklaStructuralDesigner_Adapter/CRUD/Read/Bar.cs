@@ -34,42 +34,59 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /****            Private Methods                ****/
         /***************************************************/
 
-        // One Bar per span (see BarResults.cs for why span, not member, is the unit). This exists so
-        // that ObjectIds in a BarResultRequest can be matched against real Bar objects, and so a
-        // caller who wants geometry alongside results can Pull it - not to be a complete geometry
-        // adapter: Push is not supported, and the section/material conversions are deliberately lossy.
+        // One Bar per span (see BarResults.cs for why span, not member, is the unit), with its section
+        // matched to the BHoM library or built from its shape, and its end Nodes carrying their
+        // supports.
         private List<Bar> ReadBars(IList ids)
         {
-            List<TsdSpanIdentity> spans = BuildSpanIdentities(TeklaStructuralDesignerConfig.TimeoutSeconds);
+            int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
 
-            if (ids != null && ids.Count > 0)
-            {
-                HashSet<string> requested = new HashSet<string>(ids.Cast<object>().Select(id => id?.ToString()), StringComparer.OrdinalIgnoreCase);
+            List<TsdSpanIdentity> spans = BuildSpanIdentities(timeout);
+
+            HashSet<string> requested = RequestedIds(ids);
+            if (requested != null)
                 spans = spans.Where(s => requested.Contains(s.ObjectId)).ToList();
-            }
 
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
+            ApplySupports(nodeById, ReadSupports(timeout));
+            BarPropertyCache cache = new BarPropertyCache();
 
             List<Bar> bars = new List<Bar>();
             int skipped = 0;
 
             foreach (TsdSpanIdentity span in spans)
             {
-                Node start, end;
-                if (span.StartPointId == Guid.Empty || span.EndPointId == Guid.Empty ||
-                    !nodeById.TryGetValue(span.StartPointId, out start) || !nodeById.TryGetValue(span.EndPointId, out end))
-                {
+                Bar bar;
+                if (TryBuildBar(span, nodeById, cache, out bar))
+                    bars.Add(bar);
+                else
                     skipped++;
-                    continue;
-                }
-
-                bars.Add(span.ToBHoM(start, end));
             }
 
             if (skipped > 0)
                 Engine.Base.Compute.RecordWarning(skipped + " span(s) could not be resolved to Bar geometry because one or both end points were missing, and have been skipped.");
 
+            cache.Report();
+
             return bars;
+        }
+
+        /***************************************************/
+
+        // The Bar of a span, or false if either of the span's ends could not be resolved to a Node.
+        private static bool TryBuildBar(TsdSpanIdentity span, Dictionary<Guid, Node> nodeById, BarPropertyCache cache, out Bar bar)
+        {
+            bar = null;
+
+            Node start, end;
+            if (span.StartPointId == Guid.Empty || span.EndPointId == Guid.Empty ||
+                !nodeById.TryGetValue(span.StartPointId, out start) || !nodeById.TryGetValue(span.EndPointId, out end))
+            {
+                return false;
+            }
+
+            bar = span.ToBHoM(start, end, cache);
+            return true;
         }
 
         /***************************************************/

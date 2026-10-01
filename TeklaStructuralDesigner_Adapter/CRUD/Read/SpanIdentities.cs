@@ -144,8 +144,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 IMaterial material = p.Span.Material.ValueOrDefault();
                 string materialGrade = material != null ? (material.Name ?? "") : "";
 
-                double lengthMetres = p.Span.Length.ValueOrDefault(0.0) * 0.001;
-
                 ElementGroupInfo groupInfo;
                 groupLookup.TryGetValue(p.Member.Id, out groupInfo);
 
@@ -156,7 +154,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     spanIndex: p.Span.Index,
                     spanId: p.Span.Id,
                     span: p.Span,
-                    lengthMetres: lengthMetres,
                     levelName: levelName,
                     elementGroupName: groupInfo != null ? groupInfo.Name : "",
                     parentElementGroupName: groupInfo != null ? groupInfo.ParentName : "",
@@ -257,9 +254,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (IConstructionPoint point in points)
             {
                 TSD.API.Remoting.Geometry.Point3D coordinates = point.Coordinates.ValueOrDefault(default(TSD.API.Remoting.Geometry.Point3D));
-                // Tekla Structural Designer reports coordinates in millimetres, consistent with the
-                // mm/N unit system observed on forces and section properties elsewhere in this toolkit.
-                Point position = new Point { X = coordinates.X * 0.001, Y = coordinates.Y * 0.001, Z = coordinates.Z * 0.001 };
+                Point position = coordinates.ToBHoMPoint();
 
                 string levelName = null;
                 EntityInfo planeInfo = point.PlaneInfo.ValueOrDefault(default(EntityInfo));
@@ -278,18 +273,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             Dictionary<Guid, string> lookup = new Dictionary<Guid, string>();
 
-            List<IHorizontalConstructionPlane> planes;
-            try
-            {
-                planes = Async.RunSync(ct => m_Model.GetLevelsAsync(null, ct), timeoutSeconds, "reading levels").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read levels from Tekla Structural Designer; level names will be left empty. " + e.Message);
-                return lookup;
-            }
-
-            foreach (IHorizontalConstructionPlane plane in planes)
+            foreach (IHorizontalConstructionPlane plane in ReadLevels(timeoutSeconds, "level names will be left empty"))
             {
                 string name = plane.LongReference.ValueOrDefault("");
                 if (string.IsNullOrWhiteSpace(name))
@@ -299,6 +283,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             return lookup;
+        }
+
+        /***************************************************/
+
+        // Every level in the model; empty, with a warning naming the consequence, if the read fails.
+        private List<IHorizontalConstructionPlane> ReadLevels(int timeoutSeconds, string consequence)
+        {
+            try
+            {
+                return Async.RunSync(ct => m_Model.GetLevelsAsync(null, ct), timeoutSeconds, "reading levels").ToList();
+            }
+            catch (Exception e)
+            {
+                Engine.Base.Compute.RecordWarning("Failed to read levels from Tekla Structural Designer; " + consequence + ". " + e.Message);
+                return new List<IHorizontalConstructionPlane>();
+            }
         }
 
         /***************************************************/

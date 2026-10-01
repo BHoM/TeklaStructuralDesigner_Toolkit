@@ -37,22 +37,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // (IMemberSpan.GetEndForceAsync) return the same IForce3DLocal type, so one converter serves
         // both.
         //
-        // Units: force components are already newtons - the WPF tool this was ported from applied a
-        // 1e-3 scale to reach kN, which is only explicable if the raw values are in N. Moments are
-        // therefore in N.mm, so only the moments need the 1e-3 factor to reach BHoM's SI N.m. Nothing
-        // is rounded: rounding to whole numbers, which the ported tool did, is presentation logic and
-        // has no place in an adapter.
+        // Units: the API documents IForce3DLocal's forces in N and its moments in N.mm, so only the
+        // moments are scaled - see Convert/Units.cs. Nothing is rounded.
         //
-        // Axes: BH.oM.Structure.Results.BarForce's own descriptions are the authority here - FY is
-        // "generally minor axis shear", FZ "generally major axis shear", MY "generally major axis
-        // bending", MZ "generally minor axis bending". Whether Tekla Structural Designer's local y/z
-        // agree with that or are transposed for a given model is exactly what
-        // TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes exists to let a user correct, once
-        // checked against a model with a known answer - see the toolkit README.
-        public static BarForce ToBHoM(this IForce3DLocal force, string objectId, string resultCase, double position, int divisions, bool swapMajorMinorAxes)
+        // Axes: the API documents Fy as the minor axis shear, Fz the major axis shear, My the major
+        // axis moment and Mz the minor, which is BH.oM.Structure.Results.BarForce's own convention.
+        // TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes remains as an escape hatch for a model
+        // that demonstrates otherwise - see the toolkit README.
+        public static BarForce ToBHoM(this IForce3DLocal force, string objectId, int resultCase, double position, int divisions, bool swapMajorMinorAxes)
         {
-            const double MomentScale = 0.001; // Tekla Structural Designer reports moments in N.mm; BHoM wants N.m.
-
             double fx = force.Fx;
             double fy = swapMajorMinorAxes ? force.Fz : force.Fy;
             double fz = swapMajorMinorAxes ? force.Fy : force.Fz;

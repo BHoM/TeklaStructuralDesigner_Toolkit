@@ -20,29 +20,25 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using BH.oM.Geometry;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
+using System.ComponentModel;
+using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Base.Attributes;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.Engine.Adapters.TeklaStructuralDesigner
 {
-    internal static partial class Convert
+    public static partial class Query
     {
         /***************************************************/
         /****            Public Methods                 ****/
         /***************************************************/
 
-        // A Node is a construction point. Its support, if it has one, is the one placed on that point,
-        // and its orientation that support's axis system. Construction points have no orientation of
-        // their own, so an unsupported Node keeps BHoM's default, global, orientation.
-        public static Node ToBHoM(Guid pointId, Point position, Constraint6DOF support = null, Basis orientation = null)
+        [Description("The name a LoadCombination pulled from Tekla Structural Designer is given: the limit state followed by the combination's own name, for example 'Strength 48 1.35Gk + 1.5LL' and 'Service 48 1.35Gk + 1.5LL'.")]
+        [Input("combinationName", "The combination's name as shown in Tekla Structural Designer.")]
+        [Input("limitState", "The limit state the LoadCombination represents.")]
+        [Output("name", "The LoadCombination's Name.")]
+        public static string CombinationName(string combinationName, TeklaStructuralDesignerLimitState limitState)
         {
-            Node node = new Node { Position = position, Support = support };
-            if (orientation != null)
-                node.Orientation = orientation;
-
-            return node.SetIdentity(pointId, pointId);
+            return limitState + " " + (combinationName ?? "").Trim();
         }
 
         /***************************************************/

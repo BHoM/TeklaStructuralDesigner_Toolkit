@@ -21,11 +21,14 @@
  */
 
 using System;
+using BH.Engine.Geometry;
 using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Geometry;
 using BH.oM.Structure.Elements;
 using BH.oM.Structure.MaterialFragments;
 using BH.oM.Structure.SectionProperties;
 using TSD.API.Remoting.Sections;
+using TSD.API.Remoting.Structure;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -36,22 +39,24 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // Section and material are read straight off the live IMemberSpan handle rather than off
-        // TsdSpanIdentity's own SectionName/MaterialGrade strings: those two exist only for the
-        // TeklaStructuralDesignerMemberProperties fragment, kept human readable because the numeric
-        // properties on ExplicitSection/GenericIsotropicMaterial are already a lossy reconstruction.
+        // TsdSpanIdentity's own SectionName/MaterialGrade strings, which exist only for the
+        // TeklaStructuralDesignerMemberProperties fragment. Both go through the cache so that every Bar
+        // in a pull with the same section shares one section object - see Types/BarPropertyCache.cs for
+        // how a section is matched to the library or built from its shape.
         //
-        // Orientation angle is assumed to be reported in degrees, matching common structural software
-        // convention; this has not been checked against a live model and is worth confirming - see the
-        // toolkit README.
-        public static Bar ToBHoM(this TsdSpanIdentity span, Node start, Node end)
+        // The orientation angle comes from GlobalRotationAngle, not RotationAngle. Tekla Structural
+        // Designer reports both: RotationAngle is measured from the member's own construction plane,
+        // which on a sloped plane is not the global reference BHoM measures from, while
+        // GlobalRotationAngle is measured from global axes. Checked against a live model, the two differ
+        // by up to 25 degrees on sloped plane members, and GlobalRotationAngle is the one that matches
+        // the solver's own gamma angle for every member. Both are in radians, as BHoM's is.
+        public static Bar ToBHoM(this TsdSpanIdentity span, Node start, Node end, BarPropertyCache cache)
         {
-            IMaterialFragment material = span.Span.Material.ValueOrDefault().ToBHoM();
+            IMaterialFragment material = cache.Material(span.Span.Material.ValueOrDefault());
 
             IMemberSection memberSection = span.Span.ElementSection.ValueOrDefault() as IMemberSection;
             ISection physicalSection = memberSection != null ? memberSection.PhysicalSection.ValueOrDefault() : null;
-            ISectionProperty section = physicalSection.ToBHoM(material) ?? new ExplicitSection { Name = span.SectionName, Material = material };
-
-            double rotationAngleDegrees = span.Span.RotationAngle.ValueOrDefault(0.0);
+            ISectionProperty section = cache.Section(physicalSection, material) ?? new ExplicitSection { Name = span.SectionName, Material = material };
 
             Bar bar = new Bar
             {
@@ -59,10 +64,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 Start = start,
                 End = end,
                 SectionProperty = section,
-                OrientationAngle = rotationAngleDegrees * Math.PI / 180.0,
+                Release = cache.Release(span.Span),
+                OrientationAngle = BarOrientationAngle(span.Span, start, end),
             };
 
-            bar.Fragments.Add(new TeklaStructuralDesignerId { Id = span.ObjectId });
+            bar.SetIdentity(span.ObjectId, span.SpanId);
             bar.Fragments.Add(new TeklaStructuralDesignerMemberProperties
             {
                 MemberName = span.MemberName,
@@ -79,6 +85,36 @@ namespace BH.Adapter.TeklaStructuralDesigner
             });
 
             return bar;
+        }
+
+        /***************************************************/
+        /****            Private Methods                ****/
+        /***************************************************/
+
+        // Vertical members need a quarter turn on top of the rotation Tekla Structural Designer reports.
+        // Both packages define the zero rotation of a vertical member by a horizontal reference axis, but
+        // not the same one: Tekla Structural Designer's local y runs along global X, while BHoM's runs
+        // along global Y (see BH.Engine.Geometry.Query.ElementNormal). The Tekla Structural Designer side
+        // was confirmed on a live model by comparing a column's local end forces with the global support
+        // reactions at the same end: its local y force tracked the global X reaction and its local z force
+        // the global Y one.
+        //
+        // The turn goes the other way for a member modelled top down, because BHoM keeps local y on global
+        // Y whichever way a vertical member runs, so the rotation that lands the section in the same place
+        // reverses with it. BHoM's own IsVertical decides what counts as vertical, so this agrees with the
+        // convention it is correcting for.
+        private static double BarOrientationAngle(IMemberSpan span, Node start, Node end)
+        {
+            double rotation = span.GlobalRotationAngle.ValueOrDefault(span.RotationAngle.ValueOrDefault(0.0));
+
+            if (start?.Position == null || end?.Position == null)
+                return rotation;
+
+            Line centreline = new Line { Start = start.Position, End = end.Position };
+            if (!centreline.IsVertical())
+                return rotation;
+
+            return rotation + (end.Position.Z >= start.Position.Z ? -Math.PI / 2 : Math.PI / 2);
         }
 
         /***************************************************/

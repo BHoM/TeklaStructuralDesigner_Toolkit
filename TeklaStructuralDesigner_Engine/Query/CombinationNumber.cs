@@ -20,35 +20,24 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.MaterialFragments;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.SurfaceProperties;
+using System.ComponentModel;
+using BH.oM.Base.Attributes;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.Engine.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    public static partial class Query
     {
         /***************************************************/
-        /****            Protected Methods              ****/
+        /****            Public Methods                 ****/
         /***************************************************/
 
-        // Declares which types must exist before another type can be created. Like the comparers, this is
-        // only consumed by Push, which this adapter does not yet support.
-        protected void SetupDependencies()
+        [Description("The Tekla Structural Designer combination number a BHoM case number was made from - the reverse of CaseNumber. Returns -1 for a number that is not a combination case number, such as a loadcase's.")]
+        [Input("caseNumber", "A LoadCombination Number or a result's ResultCase, as pulled from Tekla Structural Designer.")]
+        [Output("combinationNumber", "The combination's number as shown in Tekla Structural Designer.")]
+        public static int CombinationNumber(int caseNumber)
         {
-            DependencyTypes = new Dictionary<Type, List<Type>>
-            {
-                { typeof(Bar), new List<Type> { typeof(ISectionProperty), typeof(Node) } },
-                { typeof(ISectionProperty), new List<Type> { typeof(IMaterialFragment) } },
-                { typeof(RigidLink), new List<Type> { typeof(LinkConstraint), typeof(Node) } },
-                { typeof(FEMesh), new List<Type> { typeof(ISurfaceProperty), typeof(Node) } },
-                { typeof(ISurfaceProperty), new List<Type> { typeof(IMaterialFragment) } },
-                { typeof(Panel), new List<Type> { typeof(ISurfaceProperty) } },
-            };
+            int band = caseNumber / NumberBand;
+            return band == StrengthBand || band == ServiceBand ? caseNumber % NumberBand : -1;
         }
 
         /***************************************************/

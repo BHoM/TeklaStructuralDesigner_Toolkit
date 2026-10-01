@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Structure.Results;
 using TSD.API.Remoting.Loading;
+using TsdAnalysisType = TSD.API.Remoting.Solver.AnalysisType;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -44,7 +45,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             List<BarForce> results = new List<BarForce>();
 
-            TSD.API.Remoting.Solver.AnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
+            TsdAnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
             LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
 
             long callCount = (long)spans.Count * 2 * cases.Count;
@@ -55,49 +56,55 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             int failures = 0;
+            string firstFailure = null;
 
             foreach (TsdSpanIdentity span in spans)
             {
                 foreach (TsdLoadingCaseIdentity loadingCase in cases)
                 {
-                    IForce3DLocal startForce;
-                    try
+                    foreach (int end in new[] { 0, 1 })
                     {
-                        startForce = Async.RunSync(
-                            ct => span.Span.GetEndForceAsync(0, analysisType, loadingCase.Id, loadingResultType, ct),
-                            timeoutSeconds, "reading the start force of span '" + span.ObjectId + "'");
-                    }
-                    catch (Exception)
-                    {
-                        failures++;
-                        startForce = null;
-                    }
+                        string failure;
+                        IForce3DLocal force = ReadSpanEndForce(span, end, loadingCase, analysisType, loadingResultType, timeoutSeconds, out failure);
 
-                    if (startForce != null)
-                        results.Add(startForce.ToBHoM(span.ObjectId, loadingCase.Identifier, 0.0, 2, config.SwapMajorMinorAxes));
-
-                    IForce3DLocal endForce;
-                    try
-                    {
-                        endForce = Async.RunSync(
-                            ct => span.Span.GetEndForceAsync(1, analysisType, loadingCase.Id, loadingResultType, ct),
-                            timeoutSeconds, "reading the end force of span '" + span.ObjectId + "'");
+                        if (failure != null)
+                        {
+                            failures++;
+                            firstFailure = firstFailure ?? failure;
+                        }
+                        else if (force != null)
+                        {
+                            results.Add(force.ToBHoM(span.ObjectId, loadingCase.Number, end, 2, config.SwapMajorMinorAxes));
+                        }
                     }
-                    catch (Exception)
-                    {
-                        failures++;
-                        endForce = null;
-                    }
-
-                    if (endForce != null)
-                        results.Add(endForce.ToBHoM(span.ObjectId, loadingCase.Identifier, 1.0, 2, config.SwapMajorMinorAxes));
                 }
             }
 
             if (failures > 0)
-                Engine.Base.Compute.RecordWarning(failures + " span/case end force read(s) failed and have been skipped.");
+                Engine.Base.Compute.RecordWarning(failures + " span/case end force read(s) failed and have been skipped. The first failure was: " + firstFailure);
 
             return results;
+        }
+
+        /***************************************************/
+
+        // The force at one end of a span (0 for its start, 1 for its end) under one loading case, read
+        // straight off the span. Null, with failure set to the reason, if the read threw.
+        private IForce3DLocal ReadSpanEndForce(TsdSpanIdentity span, int end, TsdLoadingCaseIdentity loadingCase, TsdAnalysisType analysisType, LoadingResultType loadingResultType, int timeoutSeconds, out string failure)
+        {
+            failure = null;
+
+            try
+            {
+                return Async.RunSync(
+                    ct => span.Span.GetEndForceAsync(end, analysisType, loadingCase.Id, loadingResultType, ct),
+                    timeoutSeconds, "reading the " + (end == 0 ? "start" : "end") + " force of span '" + span.ObjectId + "'");
+            }
+            catch (Exception e)
+            {
+                failure = e.Message;
+                return null;
+            }
         }
 
         /***************************************************/

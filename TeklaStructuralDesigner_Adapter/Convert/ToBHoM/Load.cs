@@ -4,20 +4,20 @@
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
- *
- *
- * The BHoM is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3.0 of the License, or
- * (at your option) any later version.
- *
- * The BHoM is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
+ *                                           
+ *                                                                              
+ * The BHoM is free software: you can redistribute it and/or modify         
+ * it under the terms of the GNU Lesser General Public License as published by  
+ * the Free Software Foundation, either version 3.0 of the License, or          
+ * (at your option) any later version.                                          
+ *                                                                              
+ * The BHoM is distributed in the hope that it will be useful,              
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of               
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                 
+ * GNU Lesser General Public License for more details.                          
+ *                                                                            
+ * You should have received a copy of the GNU Lesser General Public License     
+ * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
 using System.Collections.Generic;
@@ -37,58 +37,32 @@ namespace BH.Adapter.TeklaStructuralDesigner
     internal static partial class Convert
     {
         /***************************************************/
-        /****            Private Fields                 ****/
-        /***************************************************/
-
-        // Unit scaling. Tekla Structural Designer works in millimetres and newtons - the convention
-        // established by Convert/ToBHoM/BarForce.cs, where forces came back in N and moments in N.mm,
-        // and by Convert/ToBHoM/Section.cs, where areas came back in mm^2. Everything below follows
-        // DEDUCTIVELY from that single premise rather than being measured independently:
-        //
-        //     distance          mm            -> m              1e-3
-        //     force             N             -> N              1
-        //     moment            N.mm          -> N.m            1e-3
-        //     force / length    N/mm          -> N/m            1e3
-        //     moment / length   (N.mm)/mm = N -> (N.m)/m = N    1
-        //
-        // The last one is not a typo: a moment per unit length has the dimensions of a force, and the
-        // millimetres cancel, so a distributed torsion moment needs no scaling at all.
-        //
-        // The premise itself has been verified for results but NOT for applied loads. If a model with
-        // known applied loading shows these out by a factor of a thousand, that premise is wrong for
-        // loads, and the fix belongs here - in one place - rather than at the call sites.
-        private const double LengthScale = 1e-3;
-        private const double ForceScale = 1.0;
-        private const double MomentScale = 1e-3;
-        private const double ForcePerLengthScale = 1e3;
-        private const double MomentPerLengthScale = 1.0;
-
-        /***************************************************/
         /****            Public Methods                 ****/
-        /****            (Nodal loads)                  ****/
         /***************************************************/
 
         // Nodal loads are given as global force and moment vectors against a construction point, so
-        // there is no direction enum to interpret and no projection to worry about - the one load type
-        // in this file that maps onto BHoM without a decision being made.
+        // there is no direction enum to interpret and no projection to worry about.
+        //
+        // The Z of the force vector follows the same gravity positive convention as global Z member
+        // loads, despite being presented as a vector: on a live model all 50 slab self weight nodal
+        // loads had a positive Z. It is reversed to give BHoM's -Z for a downward load. The moment
+        // vector is passed through unchanged - no nodal moments were in the model to check it against.
         public static PointLoad ToBHoM(this INodalLoad load, Node node, Loadcase loadcase)
         {
-            TSD.API.Remoting.Geometry.Vector3D force = load.ForceAsVector;
-            TSD.API.Remoting.Geometry.Vector3D moment = load.MomentAsVector;
+            Vector force = load.ForceAsVector.ToBHoMVector() * ForceScale;
+            force.Z = -force.Z;
 
             return new PointLoad
             {
                 Loadcase = loadcase,
                 Objects = new BHoMGroup<Node> { Elements = new List<Node> { node } },
                 Axis = LoadAxis.Global,
-                Force = new Vector { X = force.X * ForceScale, Y = force.Y * ForceScale, Z = force.Z * ForceScale },
-                Moment = new Vector { X = moment.X * MomentScale, Y = moment.Y * MomentScale, Z = moment.Z * MomentScale },
+                Force = force,
+                Moment = load.MomentAsVector.ToBHoMVector() * MomentScale,
             };
         }
 
-        /***************************************************/
-        /****            (Member loads)                 ****/
-        /***************************************************/
+        // Member loads
 
         // Dispatches one Tekla Structural Designer member load onto the BHoM load that represents it,
         // or returns null with a reason if there is no honest representation. The reason is returned
@@ -107,10 +81,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             // BHoM's Projected means the load is projected onto the plane normal to its direction.
-            // Tekla Structural Designer's Projection names the plane explicitly, so anything other than
-            // NoProjection is a projected load. Its separate Measuring property describes how the
-            // load's own distances are measured, which is handled by the caller.
-            bool projected = load.Projection != Projection.NoProjection;
+            // Tekla Structural Designer's Projection names the plane explicitly, so any named plane is a
+            // projected load; NoProjection and Unknown are not. Its separate Measuring property
+            // describes how the load's own distances are measured, which is handled by the caller.
+            bool projected = load.Projection != Projection.NoProjection && load.Projection != Projection.Unknown;
 
             switch (load.MemberLoadType)
             {
@@ -161,7 +135,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
                             Projected = projected,
                             DistanceFromA = force.Distance * LengthScale,
                             Force = direction * (force.Load * ForceScale),
-                            Moment = new Vector(),
                         };
                     }
 
@@ -178,7 +151,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
                             Axis = axis,
                             Projected = projected,
                             DistanceFromA = moment.Distance * LengthScale,
-                            Force = new Vector(),
                             Moment = direction * (moment.Load * MomentScale),
                         };
                     }
@@ -244,26 +216,36 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         private static bool TryDirection(LoadDirection direction, out Vector unit, out LoadAxis axis)
         {
+            // Tekla Structural Designer's global Z loads are positive downwards - gravity positive -
+            // while BHoM's Force is the direction the load actually acts in, so a downward load is -Z.
+            // Checked on a live model: every self weight, dead, imposed and snow member load in Zg
+            // carried a positive value, while global X and Y loads were positive along +X and +Y (wind
+            // from the north negative in Y, from the south positive).
+            //
+            // U and V are undocumented in the API and do not correspond to either of BHoM's two load
+            // axes. Refused rather than guessed: a load applied along the wrong axis is worse than a
+            // load reported as unconvertible.
+            axis = direction == LoadDirection.X || direction == LoadDirection.Y || direction == LoadDirection.Z ? LoadAxis.Local : LoadAxis.Global;
+
             switch (direction)
             {
                 case LoadDirection.X:
-                    unit = new Vector { X = 1 }; axis = LoadAxis.Local; return true;
-                case LoadDirection.Y:
-                    unit = new Vector { Y = 1 }; axis = LoadAxis.Local; return true;
-                case LoadDirection.Z:
-                    unit = new Vector { Z = 1 }; axis = LoadAxis.Local; return true;
                 case LoadDirection.Xg:
-                    unit = new Vector { X = 1 }; axis = LoadAxis.Global; return true;
+                    unit = new Vector { X = 1 };
+                    return true;
+                case LoadDirection.Y:
                 case LoadDirection.Yg:
-                    unit = new Vector { Y = 1 }; axis = LoadAxis.Global; return true;
+                    unit = new Vector { Y = 1 };
+                    return true;
+                case LoadDirection.Z:
+                    unit = new Vector { Z = 1 };
+                    return true;
                 case LoadDirection.Zg:
-                    unit = new Vector { Z = 1 }; axis = LoadAxis.Global; return true;
-
-                // U and V are undocumented in the API and do not correspond to either of BHoM's two
-                // load axes. Refused rather than guessed: a load applied along the wrong axis is worse
-                // than a load reported as unconvertible.
+                    unit = new Vector { Z = -1 };
+                    return true;
                 default:
-                    unit = null; axis = LoadAxis.Global; return false;
+                    unit = null;
+                    return false;
             }
         }
 

@@ -20,6 +20,7 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
+using System.Linq;
 using BH.Adapter.TeklaStructuralDesigner;
 using BH.Engine.Adapter;
 using BH.oM.Adapters.TeklaStructuralDesigner;
@@ -29,7 +30,6 @@ using BH.oM.Structure.Requests;
 using BH.oM.Structure.Results;
 using NUnit.Framework;
 using Shouldly;
-using System.Linq;
 
 namespace BH.Tests.Adapter.TeklaStructuralDesigner
 {
@@ -44,7 +44,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
     public class PullTests
     {
         /***************************************************/
-        /**** Public methods - setup                    ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
         private TeklaStructuralDesignerAdapter m_Adapter = null!;
@@ -53,6 +53,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         [Description("Attaches to the single running Tekla Structural Designer instance. Fails the fixture immediately, with a clear message, if that is not what is found - rather than let every test fail individually for the same reason.")]
         public void OneTimeSetup()
         {
+            BH.Engine.Base.Compute.ClearCurrentEvents();
             m_Adapter = new TeklaStructuralDesignerAdapter("", new TeklaStructuralDesignerConfig(), true);
 
             var errors = BH.Engine.Base.Query.CurrentEvents()
@@ -177,23 +178,28 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
-        [Description("The CombinationFactor setting must actually change the factors pulled - otherwise the setting is decorative and an SLS pull would silently return ULS factors.")]
-        public void CombinationFactorSelectsADifferentFactor()
+        [Description("Each Tekla Structural Designer combination must come through as a Strength and a Service LoadCombination, numbered 1000 + n and 2000 + n, named with their limit state, and carrying their own factors - otherwise a Service request would silently return Strength factors.")]
+        public void CombinationsSplitIntoStrengthAndService()
         {
-            BH.oM.Data.Requests.FilterRequest NewRequest() => new BH.oM.Data.Requests.FilterRequest { Type = typeof(LoadCombination) };
+            var combinations = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(LoadCombination) }).Cast<LoadCombination>().ToList();
 
-            var strength = m_Adapter.Pull(NewRequest(), actionConfig: new TeklaStructuralDesignerPullConfig { CombinationFactor = TeklaStructuralDesignerCombinationFactor.Strength })
-                .Cast<LoadCombination>().SelectMany(c => c.LoadCases).Select(t => t.Item1).ToList();
+            var strength = combinations.Where(c => c.Name.StartsWith("Strength ")).ToList();
+            var service = combinations.Where(c => c.Name.StartsWith("Service ")).ToList();
 
-            var service = m_Adapter.Pull(NewRequest(), actionConfig: new TeklaStructuralDesignerPullConfig { CombinationFactor = TeklaStructuralDesignerCombinationFactor.Service })
-                .Cast<LoadCombination>().SelectMany(c => c.LoadCases).Select(t => t.Item1).ToList();
+            strength.ShouldNotBeEmpty();
+            service.ShouldNotBeEmpty();
+            (strength.Count + service.Count).ShouldBe(combinations.Count, "every combination should carry a limit state prefix");
 
-            strength.Count.ShouldBe(service.Count);
+            // Numbers are unique across both limit states, and each band holds only its own limit state.
+            combinations.Select(c => c.Number).Distinct().Count().ShouldBe(combinations.Count);
+            strength.All(c => c.Number / 1000 == 1).ShouldBeTrue();
+            service.All(c => c.Number / 1000 == 2).ShouldBeTrue();
 
-            // A model with any strength combination in it will have at least one factor that differs
-            // between the two sets; if this fails on a model that genuinely has identical factors
-            // throughout, it is the model that is unusual rather than the adapter.
-            strength.SequenceEqual(service).ShouldBeFalse("selecting Service should not return the Strength factors");
+            // The Strength and Service versions of one combination hold different factors. If this fails
+            // on a model whose factors are genuinely identical throughout, it is the model that is unusual.
+            var pairs = strength.Join(service, s => s.Number % 1000, v => v.Number % 1000, (s, v) => new { s, v }).ToList();
+            pairs.ShouldNotBeEmpty();
+            pairs.Any(p => !p.s.LoadCases.Select(t => t.Item1).SequenceEqual(p.v.LoadCases.Select(t => t.Item1))).ShouldBeTrue("Service should not carry the Strength factors");
         }
 
         /***************************************************/

@@ -20,29 +20,31 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using BH.oM.Geometry;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Base.Attributes;
+using BH.oM.Structure.Loads;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.Engine.Adapters.TeklaStructuralDesigner
 {
-    internal static partial class Convert
+    public static partial class Query
     {
         /***************************************************/
         /****            Public Methods                 ****/
         /***************************************************/
 
-        // A Node is a construction point. Its support, if it has one, is the one placed on that point,
-        // and its orientation that support's axis system. Construction points have no orientation of
-        // their own, so an unsupported Node keeps BHoM's default, global, orientation.
-        public static Node ToBHoM(Guid pointId, Point position, Constraint6DOF support = null, Basis orientation = null)
+        [Description("The LoadCombinations of one limit state, from a list pulled from Tekla Structural Designer - for example every Service combination, to request deflection results for.")]
+        [Input("combinations", "LoadCombinations pulled from Tekla Structural Designer.")]
+        [Input("limitState", "The limit state to keep.")]
+        [Output("combinations", "The combinations of that limit state, in the order given.")]
+        public static List<LoadCombination> FilterByLimitState(this List<LoadCombination> combinations, TeklaStructuralDesignerLimitState limitState)
         {
-            Node node = new Node { Position = position, Support = support };
-            if (orientation != null)
-                node.Orientation = orientation;
+            if (combinations == null)
+                return new List<LoadCombination>();
 
-            return node.SetIdentity(pointId, pointId);
+            return combinations.Where(c => c != null && c.LimitState() == limitState).ToList();
         }
 
         /***************************************************/

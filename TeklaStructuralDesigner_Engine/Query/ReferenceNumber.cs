@@ -20,29 +20,32 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using BH.oM.Geometry;
-using BH.oM.Structure.Constraints;
-using BH.oM.Structure.Elements;
+using System.ComponentModel;
+using BH.oM.Base.Attributes;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.Engine.Adapters.TeklaStructuralDesigner
 {
-    internal static partial class Convert
+    public static partial class Query
     {
         /***************************************************/
         /****            Public Methods                 ****/
         /***************************************************/
 
-        // A Node is a construction point. Its support, if it has one, is the one placed on that point,
-        // and its orientation that support's axis system. Construction points have no orientation of
-        // their own, so an unsupported Node keeps BHoM's default, global, orientation.
-        public static Node ToBHoM(Guid pointId, Point position, Constraint6DOF support = null, Basis orientation = null)
+        [Description("The number a Tekla Structural Designer loadcase or combination name starts with - the reference number Tekla Structural Designer shows for it, as in '48 1.35Gk + 1.5LL' or '30 LL CONCOURSE'. Returns -1 if the name does not start with a number.")]
+        [Input("name", "The loadcase or combination name as shown in Tekla Structural Designer.")]
+        [Output("number", "The reference number, or -1.")]
+        public static int ReferenceNumber(string name)
         {
-            Node node = new Node { Position = position, Support = support };
-            if (orientation != null)
-                node.Orientation = orientation;
+            if (string.IsNullOrWhiteSpace(name))
+                return -1;
 
-            return node.SetIdentity(pointId, pointId);
+            string trimmed = name.TrimStart();
+            int end = 0;
+            while (end < trimmed.Length && char.IsDigit(trimmed[end]))
+                end++;
+
+            int number;
+            return end > 0 && int.TryParse(trimmed.Substring(0, end), out number) ? number : -1;
         }
 
         /***************************************************/
