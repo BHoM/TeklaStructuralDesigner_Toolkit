@@ -346,8 +346,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // A wall opening is a rectangle Width wide and Height high whose corner is Offset from the origin
-        // of its reference plane, in that plane's own coordinates.
+        // A wall opening is a rectangle Width wide and Height high, in the coordinates of its reference
+        // plane, whose corner is Offset from its reference point - not from the origin of the plane, which
+        // can be far from the wall. Checked on a live model: an opening with Offset (-1990, 1175), 655 by
+        // 600, referenced from the wall's start point, lies exactly where the solver mesh has its four
+        // corner nodes. Width and Height run along the plane's own positive axes, whichever way the wall
+        // itself runs - which is why the Offset along the wall can be negative.
         private static List<Polyline> WallOpenings(IStructuralWallPanel wallPanel, Polyline outline, int timeout, PanelReadState state)
         {
             List<Polyline> result = new List<Polyline>();
@@ -376,13 +380,25 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     continue;
                 }
 
+                if (opening.ReferenceCoordinates == null || !opening.ReferenceCoordinates.IsApplicable)
+                {
+                    state.Skip("wall opening(s)", "they have no reference point to be placed from");
+                    continue;
+                }
+
+                Vector3D reference = opening.ReferenceCoordinates.Value;
+                Point2D origin = plane.Global2Local(new Point3D(reference.X, reference.Y, reference.Z));
                 Vector2D offset = opening.Offset.ValueOrDefault();
+
+                double x = origin.X + offset.X;
+                double y = origin.Y + offset.Y;
+
                 Point2D[] corners =
                 {
-                    new Point2D(offset.X, offset.Y),
-                    new Point2D(offset.X + width, offset.Y),
-                    new Point2D(offset.X + width, offset.Y + height),
-                    new Point2D(offset.X, offset.Y + height),
+                    new Point2D(x, y),
+                    new Point2D(x + width, y),
+                    new Point2D(x + width, y + height),
+                    new Point2D(x, y + height),
                 };
 
                 Polyline rectangle = corners.ToBHoMPolyline(plane);
