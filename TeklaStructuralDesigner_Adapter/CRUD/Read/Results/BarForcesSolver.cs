@@ -29,7 +29,6 @@ using TSD.API.Remoting.Common;
 using TSD.API.Remoting.Loading;
 using TSD.API.Remoting.Solver;
 using TSD.API.Remoting.Structure;
-using TsdAnalysisType = TSD.API.Remoting.Solver.AnalysisType;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
@@ -54,27 +53,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             List<BarForce> results = new List<BarForce>();
 
-            TsdAnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
             LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
 
-            List<TSD.API.Remoting.Solver.IModel> solverModels;
-            try
-            {
-                solverModels = Async.RunSync(ct => m_Model.GetSolverModelsAsync(new[] { analysisType }, ct), timeoutSeconds, "reading the solver model").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read the solver model for " + config.AnalysisType + " from Tekla Structural Designer. " + e.Message);
-                return results;
-            }
-
-            TSD.API.Remoting.Solver.IModel solverModel = solverModels.FirstOrDefault();
+            TSD.API.Remoting.Solver.IModel solverModel = SolverModel(config, timeoutSeconds);
             if (solverModel == null)
-            {
-                Engine.Base.Compute.RecordError("No solver model is available for " + config.AnalysisType +
-                    " in Tekla Structural Designer. Run the analysis for that type, or choose a different AnalysisType on the pull configuration.");
                 return results;
-            }
 
             List<IElement1D> elements;
             try
@@ -123,40 +106,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     spanByKey[key] = span;
             }
 
-            IAnalysisResults analysisResults;
-            try
-            {
-                analysisResults = Async.RunSync(ct => solverModel.GetResultsAsync(ct), timeoutSeconds, "reading analysis results");
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read analysis results for " + config.AnalysisType + " from Tekla Structural Designer. " + e.Message);
-                return results;
-            }
-
-            if (analysisResults == null)
-            {
-                Engine.Base.Compute.RecordError("No analysis results are available for " + config.AnalysisType +
-                    " in Tekla Structural Designer. Run the analysis, then pull again.");
-                return results;
-            }
-
-            IAnalysis3DResults analysis3D;
-            try
-            {
-                analysis3D = Async.RunSync(ct => analysisResults.GetAnalysis3DAsync(ct), timeoutSeconds, "reading 3D analysis results");
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read 3D analysis results for " + config.AnalysisType + " from Tekla Structural Designer. " + e.Message);
-                return results;
-            }
-
+            IAnalysis3DResults analysis3D = Analysis3D(solverModel, config, timeoutSeconds);
             if (analysis3D == null)
-            {
-                Engine.Base.Compute.RecordError("No 3D analysis results are available for " + config.AnalysisType + " in Tekla Structural Designer.");
                 return results;
-            }
 
             List<TsdLoadingCaseIdentity> solvedCases = SolvedCasesOnly(analysis3D, cases, config.AnalysisType.ToString(), timeoutSeconds);
             if (solvedCases.Count == 0)

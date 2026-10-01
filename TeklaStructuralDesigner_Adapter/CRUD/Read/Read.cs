@@ -96,7 +96,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return ReadLoads(type, config).Cast<IBHoMObject>();
             }
 
-            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, and bar forces; use a BarResultRequest to pull bar forces.");
+            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, bar forces, node reactions and node displacements; use a BarResultRequest or a NodeResultRequest to pull results.");
             return new List<IBHoMObject>();
         }
 

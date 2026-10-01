@@ -147,6 +147,47 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Node reactions must come back against pulled Nodes that carry a support, once per Node and case - the two things that make a pulled reaction usable downstream.")]
+        public void NodeReactionsLandOnSupportedNodes()
+        {
+            var nodes = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(Node) }).Cast<Node>().ToList();
+            var nodeById = nodes.ToDictionary(n => n.AdapterId<object>(typeof(TeklaStructuralDesignerId)).ToString());
+
+            var config = new TeklaStructuralDesignerPullConfig { IncludeLoadcases = true, IncludeStrengthCombinations = false };
+            var results = m_Adapter.ReadResults(new NodeResultRequest { ResultType = NodeResultType.NodeReaction }, config).Cast<NodeReaction>().ToList();
+
+            results.ShouldNotBeEmpty("the test model needs at least one support under a member end, and to have been analysed");
+            results.All(r => nodeById.ContainsKey(r.ObjectId.ToString())).ShouldBeTrue("every reaction should be reported against a pulled Node");
+            results.All(r => nodeById[r.ObjectId.ToString()].Support != null).ShouldBeTrue("a reaction should only be reported at a supported Node");
+            results.GroupBy(r => new { Id = r.ObjectId.ToString(), Case = r.ResultCase.ToString() }).All(g => g.Count() == 1).ShouldBeTrue();
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Node displacements requested for specific pulled Nodes must return one result per Node and case, in metres - a displacement of a metre or more would mean the millimetres were not converted.")]
+        public void NodeDisplacementsReturnedForRequestedNodes()
+        {
+            var nodes = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(Node) }).Cast<Node>().Take(5).ToList();
+            nodes.ShouldNotBeEmpty();
+
+            var config = new TeklaStructuralDesignerPullConfig { IncludeLoadcases = true, IncludeStrengthCombinations = false };
+            var request = new NodeResultRequest
+            {
+                ResultType = NodeResultType.NodeDisplacement,
+                ObjectIds = nodes.Cast<object>().ToList(),
+            };
+
+            var results = m_Adapter.ReadResults(request, config).Cast<NodeDisplacement>().ToList();
+
+            results.ShouldNotBeEmpty();
+            results.Select(r => r.ObjectId.ToString()).Distinct().Count().ShouldBe(nodes.Count);
+            results.All(r => System.Math.Abs(r.UX) < 1 && System.Math.Abs(r.UY) < 1 && System.Math.Abs(r.UZ) < 1).ShouldBeTrue();
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Pulling Loadcases must return at least one, with a name rather than a Guid, and a Number matching the loadcase's index in Tekla Structural Designer.")]
         public void PullLoadcases()
         {

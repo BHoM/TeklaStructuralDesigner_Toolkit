@@ -109,9 +109,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        internal static string UnsupportedResultType(string resultType)
+        internal static string UnsupportedResultType(string resultType, string supported)
         {
-            return "Results of type " + resultType + " cannot be read from Tekla Structural Designer by this adapter. Only bar forces are supported.";
+            return "Results of type " + resultType + " cannot be read from Tekla Structural Designer by this adapter. " + supported;
         }
 
         /***************************************************/
@@ -133,8 +133,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         internal static string NoCases()
         {
-            return "No loading cases were found in the model open in Tekla Structural Designer, so no bar results could be read. " +
+            return "No loading cases were found in the model open in Tekla Structural Designer, so no results could be read. " +
                    "Check that the model contains load combinations and has been analysed.";
+        }
+
+        /***************************************************/
+
+        internal static string NoNodes()
+        {
+            return "No Nodes were found in the model open in Tekla Structural Designer, so no node results could be read.";
         }
 
         /***************************************************/

@@ -55,7 +55,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             if (request.ResultType != BarResultType.BarForce)
             {
-                Engine.Base.Compute.RecordError(ErrorMessages.UnsupportedResultType(request.ResultType.ToString()));
+                Engine.Base.Compute.RecordError(ErrorMessages.UnsupportedResultType(request.ResultType.ToString(), "A BarResultRequest reads bar forces only."));
                 return new List<BarForce>();
             }
 

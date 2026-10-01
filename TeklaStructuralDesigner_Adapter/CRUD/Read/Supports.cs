@@ -45,7 +45,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // Nodes with the same fixity share one Constraint6DOF, as they would in any analysis package. A
         // support with its own axis system gives its Node that Orientation, which is the frame BHoM reads
         // the Node's Support in.
-        private Dictionary<Guid, SupportedPoint> ReadSupports(int timeoutSeconds)
+        //
+        // report false leaves out the summary of what was skipped or approximated, for callers that only
+        // need to know which points are supported.
+        private Dictionary<Guid, SupportedPoint> ReadSupports(int timeoutSeconds, bool report = true)
         {
             Dictionary<Guid, SupportedPoint> result = new Dictionary<Guid, SupportedPoint>();
 
@@ -115,6 +118,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
                 result[point.Id] = new SupportedPoint(point.Position, constraint, orientation);
             }
+
+            if (!report)
+                return result;
 
             if (unresolved > 0)
                 Engine.Base.Compute.RecordWarning(unresolved + " support(s) could not be matched to a construction point or had no fixity data, and have been skipped.");

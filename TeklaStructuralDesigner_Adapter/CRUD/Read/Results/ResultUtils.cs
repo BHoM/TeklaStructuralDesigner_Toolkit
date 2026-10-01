@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using System.Linq;
 using BH.Engine.Base;
 using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Structure.Elements;
 using BH.oM.Structure.Loads;
 
 namespace BH.Adapter.TeklaStructuralDesigner
@@ -60,7 +61,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             foreach (object requested in objectIds)
             {
-                string key = SpanKey(requested);
+                string key = ObjectKey(requested);
                 TsdSpanIdentity found;
 
                 if (key != null && byObjectId.TryGetValue(key, out found))
@@ -86,7 +87,50 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        private static string SpanKey(object requested)
+        // The Nodes a node result request reads, in the order they are pulled. An empty or null ObjectIds
+        // means every Node. Otherwise each requested item can be the Node's id - the Guid of its
+        // construction point, as a Guid or as text - or a Node previously pulled from this adapter.
+        private List<KeyValuePair<Guid, Node>> FilterNodes(Dictionary<Guid, Node> nodeById, List<object> objectIds)
+        {
+            if (objectIds == null || objectIds.Count == 0)
+                return nodeById.ToList();
+
+            List<KeyValuePair<Guid, Node>> matched = new List<KeyValuePair<Guid, Node>>();
+            HashSet<Guid> seen = new HashSet<Guid>();
+            List<string> unmatched = new List<string>();
+
+            foreach (object requested in objectIds)
+            {
+                string key = ObjectKey(requested);
+                Guid id;
+                Node found;
+
+                if (key == null || !Guid.TryParse(key, out id) || !nodeById.TryGetValue(id, out found))
+                    unmatched.Add(key ?? "<null>");
+                else if (seen.Add(id))
+                    matched.Add(new KeyValuePair<Guid, Node>(id, found));
+            }
+
+            if (unmatched.Count > 0)
+            {
+                string message = "Could not match " + unmatched.Count + " of " + objectIds.Count +
+                    " requested object(s) to a Node. Accepted forms are the Node's id (the Guid of its construction point) or a Node previously pulled from this adapter. Unmatched: " +
+                    string.Join(", ", unmatched.Take(10)) + (unmatched.Count > 10 ? ", ..." : "");
+
+                if (matched.Count == 0)
+                    Engine.Base.Compute.RecordError(message);
+                else
+                    Engine.Base.Compute.RecordWarning(message);
+            }
+
+            return matched;
+        }
+
+        /***************************************************/
+
+        // A requested object as the text its identifier is matched on: the text itself, or the
+        // TeklaStructuralDesignerId of an object pulled from this adapter.
+        private static string ObjectKey(object requested)
         {
             if (requested == null)
                 return null;

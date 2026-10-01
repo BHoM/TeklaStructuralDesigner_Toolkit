@@ -49,10 +49,24 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // carrying one support.
         private List<Node> ReadNodes(IList ids)
         {
-            int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
+            Dictionary<Guid, Node> nodeById = NodesById(TeklaStructuralDesignerConfig.TimeoutSeconds, true);
 
+            HashSet<string> requested = RequestedIds(ids);
+            if (requested == null)
+                return nodeById.Values.ToList();
+
+            return nodeById.Where(kvp => requested.Contains(kvp.Key.ToString())).Select(kvp => kvp.Value).ToList();
+        }
+
+        /***************************************************/
+
+        // Every Node this adapter pulls, keyed by the Guid of its construction point. Node results are
+        // read against the same set, with reportSupports false so that a result pull does not repeat
+        // what pulling the Nodes says about their supports.
+        private Dictionary<Guid, Node> NodesById(int timeout, bool reportSupports)
+        {
             List<TsdSpanIdentity> spans = BuildSpanIdentities(timeout);
-            Dictionary<Guid, SupportedPoint> supports = ReadSupports(timeout);
+            Dictionary<Guid, SupportedPoint> supports = ReadSupports(timeout, reportSupports);
 
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
             HashSet<Guid> attached = ApplySupports(nodeById, supports);
@@ -67,11 +81,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 nodeById[supported.Key] = Convert.ToBHoM(supported.Key, supported.Value.Position, supported.Value.Support, supported.Value.Orientation);
             }
 
-            HashSet<string> requested = RequestedIds(ids);
-            if (requested == null)
-                return nodeById.Values.ToList();
-
-            return nodeById.Where(kvp => requested.Contains(kvp.Key.ToString())).Select(kvp => kvp.Value).ToList();
+            return nodeById;
         }
 
         /***************************************************/

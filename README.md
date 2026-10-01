@@ -30,6 +30,7 @@ This is a **read-only** adapter. Push (Create/Update/Delete) is not supported. W
 | `Loadcase`, `LoadCombination`, `ICase` | Loadcases with a `LoadNature`, and combinations whose `LoadCases` reference those Loadcases |
 | `ILoad`, or a concrete load type | Bar, nodal, area, contour and line loads - see below |
 | `BarResultRequest` / `BarForce` | Bar end forces |
+| `NodeResultRequest` / `NodeReaction`, `NodeDisplacement` | Support reactions and node displacements - see below |
 
 ### Sections, materials and supports
 - **Steel sections** are looked up in the BHoM steel section library (`Structure\SectionProperties`,
@@ -173,8 +174,8 @@ the combination is switched on for:
 - Each LoadCombination carries a `TeklaStructuralDesignerCombinationProperties` fragment with its
   `LimitState` and the Tekla Structural Designer combination number, name and Guid.
 - **Results** carry the case `Number` as their `ResultCase` - 1048 for the strength results of
-  combination 48, 2048 for its service results, 30 for loadcase 30. On a `BarResultRequest`, name
-  cases by a pulled Loadcase or LoadCombination, by number (`1048`, or `"1048"`), or by name. With no
+  combination 48, 2048 for its service results, 30 for loadcase 30. On a `BarResultRequest` or a
+  `NodeResultRequest`, name cases by a pulled Loadcase or LoadCombination, by number (`1048`, or `"1048"`), or by name. With no
   cases named, the pull configuration decides: `IncludeStrengthCombinations` (default true),
   `IncludeServiceCombinations` (default false) and `IncludeLoadcases` (default false).
 - **Strength results include notional horizontal loads.** Checked on a live model: service results
@@ -183,6 +184,26 @@ the combination is switched on for:
   horizontal loads, which are not a loadcase. A pulled Strength LoadCombination therefore does not
   reproduce Tekla Structural Designer's strength results if re-analysed elsewhere; the pull notes how
   many combinations this affects.
+
+### Node results
+A `NodeResultRequest` reads `NodeReaction` or `NodeDisplacement` from the solver model, in one call
+per case, with the same cases and pull configuration as bar forces. Other node result types are not
+read.
+
+- **Results are reported against the pulled Nodes.** Their `ObjectId` is the Node's
+  `TeklaStructuralDesignerId` (the Guid of its construction point, as text). Name Nodes on the
+  request by that id or by passing pulled Nodes; with none named, every Node is read.
+- **A Node is matched to the solver node at its position**, within a millimetre: the solver has
+  nodes of its own, identified only by an index and coordinates. Solver nodes that no pulled Node
+  sits on - along a span, or in the mesh of a slab or wall - are left out.
+- **Reactions are read at supported Nodes only, once per position.** Where several Nodes share a
+  support's position, the reaction is reported against the first, so that reactions sum correctly.
+  Supports the solver places where there is no pulled Node, such as along the base of a wall, are
+  counted in a warning and not read, so the reactions pulled can be less than the total on the
+  structure.
+- **Units and signs.** Forces are N, moments N.m, displacements m and rotations rad, all in global
+  axes with +Z upwards: an upward reaction and an upward displacement are positive. Checked on a
+  live model under self weight.
 
 ### Deployment
 Tekla Structural Designer's Remoting API brings its own gRPC dependency chain (`Grpc.Core`,
