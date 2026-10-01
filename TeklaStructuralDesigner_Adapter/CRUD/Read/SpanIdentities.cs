@@ -273,14 +273,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             Dictionary<Guid, string> lookup = new Dictionary<Guid, string>();
 
-            foreach (IHorizontalConstructionPlane plane in ReadLevels(timeoutSeconds, "level names will be left empty"))
-            {
-                string name = plane.LongReference.ValueOrDefault("");
-                if (string.IsNullOrWhiteSpace(name))
-                    name = plane.ShortReference.ValueOrDefault("");
-
-                lookup[plane.Id] = string.IsNullOrWhiteSpace(name) ? "Unassigned" : name.Trim();
-            }
+            foreach (IHorizontalConstructionPlane plane in ReadTsdLevels(timeoutSeconds, "level names will be left empty"))
+                lookup[plane.Id] = plane.LevelName();
 
             return lookup;
         }
@@ -288,7 +282,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // Every level in the model; empty, with a warning naming the consequence, if the read fails.
-        private List<IHorizontalConstructionPlane> ReadLevels(int timeoutSeconds, string consequence)
+        private List<IHorizontalConstructionPlane> ReadTsdLevels(int timeoutSeconds, string consequence)
         {
             try
             {

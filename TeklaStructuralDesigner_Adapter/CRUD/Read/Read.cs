@@ -28,6 +28,7 @@ using BH.oM.Adapter;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Analytical.Results;
 using BH.oM.Base;
+using BH.oM.Spatial.SettingOut;
 using BH.oM.Structure.Elements;
 using BH.oM.Structure.Loads;
 
@@ -65,6 +66,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (type == typeof(Panel))
                 return ReadPanels(ids, config).Cast<IBHoMObject>();
 
+            if (type == typeof(Level))
+                return ReadLevels(ids).Cast<IBHoMObject>();
+
+            if (type == typeof(Grid))
+                return ReadGrids(ids).Cast<IBHoMObject>();
+
             if (typeof(IResult).IsAssignableFrom(type))
             {
                 // Results are requested through a result request rather than by type, and are served by the
@@ -96,7 +103,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return ReadLoads(type, config).Cast<IBHoMObject>();
             }
 
-            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, bar forces, node reactions and node displacements; use a BarResultRequest or a NodeResultRequest to pull results.");
+            Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Levels, Grids, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, bar forces, node reactions and node displacements; use a BarResultRequest or a NodeResultRequest to pull results.");
             return new List<IBHoMObject>();
         }
 

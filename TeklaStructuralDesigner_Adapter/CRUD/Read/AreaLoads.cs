@@ -188,7 +188,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             Dictionary<Tuple<EntityType, int>, TsdPlane> result = new Dictionary<Tuple<EntityType, int>, TsdPlane>();
 
-            foreach (IHorizontalConstructionPlane level in ReadLevels(timeout, "patch and line loads on levels cannot be placed"))
+            foreach (IHorizontalConstructionPlane level in ReadTsdLevels(timeout, "patch and line loads on levels cannot be placed"))
                 result[Tuple.Create(EntityType.HorizontalConstructionPlane, level.Index)] = level.Plane.ValueOrDefault();
 
             try

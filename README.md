@@ -27,6 +27,8 @@ This is a **read-only** adapter. Push (Create/Update/Delete) is not supported. W
 | `Bar` | One Bar per span, with its section and material - see below |
 | `Node` | The Nodes at span ends and at every support, with the support as a `Constraint6DOF` |
 | `Panel` | Slab items, structural wall panels, roofs and wind walls - see below |
+| `Level` | Every level, with its elevation - see below |
+| `Grid` | One Grid per grid line of every architectural grid - see below |
 | `Loadcase`, `LoadCombination`, `ICase` | Loadcases with a `LoadNature`, and combinations whose `LoadCases` reference those Loadcases |
 | `ILoad`, or a concrete load type | Bar, nodal, area, contour and line loads - see below |
 | `BarResultRequest` / `BarForce` | Bar end forces |
@@ -104,6 +106,18 @@ Pulling `Panel` returns every 2D element in the model. Each carries a `TeklaStru
   running most nearly along the span. The Panel's normal matches the element's in Tekla Structural
   Designer, which for a wind wall is the direction the wind acts in. Tekla Structural Designer
   exposes no span direction for wind walls, so their local x is simply horizontal along the wall.
+
+### Levels and grids
+- **Levels** are Tekla Structural Designer's horizontal construction planes, pulled as
+  `BH.oM.Spatial.SettingOut.Level` with their `Elevation` in metres, lowest first. A Level's `Name`
+  is its long reference (or its short one if it has none) - "Base", "1" - which is also the
+  `LevelName` on a Bar's `TeklaStructuralDesignerMemberProperties`, so a Bar can be tied to its Level
+  by name. Every level is pulled, whether or not it is a floor.
+- **Grids** are pulled as one `BH.oM.Spatial.SettingOut.Grid` per grid line, named by its label
+  ("A", "1") and holding the line as its `Curve`, at the elevation of the architectural grid's own
+  plane. A BHoM Grid has nowhere to say which architectural grid it belongs to, so two architectural
+  grids that share a label give two Grids of that name, with a warning. Arc grid lines are skipped
+  with a counted warning: only straight ones are converted.
 
 ### Loads
 Tekla Structural Designer hangs loads off loadcases, so pulling loads reads every loadcase. Member

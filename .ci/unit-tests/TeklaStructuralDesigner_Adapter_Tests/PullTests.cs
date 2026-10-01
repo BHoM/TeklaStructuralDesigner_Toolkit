@@ -147,6 +147,35 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Pulling Levels must return at least one, named, lowest first, each carrying a TeklaStructuralDesignerId fragment.")]
+        public void PullLevels()
+        {
+            var levels = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(BH.oM.Spatial.SettingOut.Level) }).Cast<BH.oM.Spatial.SettingOut.Level>().ToList();
+
+            levels.ShouldNotBeEmpty();
+            levels.All(l => !string.IsNullOrWhiteSpace(l.Name)).ShouldBeTrue();
+            levels.All(l => l.HasAdapterIdFragment(typeof(TeklaStructuralDesignerId))).ShouldBeTrue();
+            levels.Select(l => l.Elevation).ShouldBe(levels.Select(l => l.Elevation).OrderBy(e => e));
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Pulling Grids must return one named Grid per grid line, each with a line of some length as its Curve.")]
+        public void PullGridsReturnNamedLines()
+        {
+            var grids = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(BH.oM.Spatial.SettingOut.Grid) }).Cast<BH.oM.Spatial.SettingOut.Grid>().ToList();
+
+            grids.ShouldNotBeEmpty("the test model needs at least one architectural grid");
+            grids.All(g => !string.IsNullOrWhiteSpace(g.Name)).ShouldBeTrue();
+            grids.All(g => g.HasAdapterIdFragment(typeof(TeklaStructuralDesignerId))).ShouldBeTrue();
+            grids.All(g => g.Curve is BH.oM.Geometry.Line line && line.Start != null && line.End != null &&
+                System.Math.Sqrt(System.Math.Pow(line.End.X - line.Start.X, 2) + System.Math.Pow(line.End.Y - line.Start.Y, 2) + System.Math.Pow(line.End.Z - line.Start.Z, 2)) > 0).ShouldBeTrue();
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Node reactions must come back against pulled Nodes that carry a support, once per Node and case - the two things that make a pulled reaction usable downstream.")]
         public void NodeReactionsLandOnSupportedNodes()
         {
