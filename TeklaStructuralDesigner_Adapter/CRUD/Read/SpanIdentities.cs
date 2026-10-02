@@ -38,7 +38,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /****            (Span identity)                ****/
         /***************************************************/
 
-        // Builds one TsdSpanIdentity per span in the whole model. Every member and span is included:
+        // Builds one TsdSpanIdentity per span in the whole model, or per span of the members with the
+        // given indices - which is how a pull of the current selection avoids reading every member.
+        // Every member and span is included:
         // this adapter does not filter by material or construction type, unlike the tool it was ported
         // from - that kind of filtering is application logic for whatever consumes the pull, not
         // something the adapter should decide on the caller's behalf.
@@ -47,14 +49,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // never read against stale identities. The cost is a handful of extra calls (GetMembersAsync,
         // one GetSpanAsync per member, one GetElementGroupsAsync, one GetLevelsAsync, one
         // GetConstructionPointsAsync) which is negligible next to the results calls that follow.
-        private List<TsdSpanIdentity> BuildSpanIdentities(int timeoutSeconds)
+        private List<TsdSpanIdentity> BuildSpanIdentities(int timeoutSeconds, ICollection<int> memberIndices = null)
         {
             List<TsdSpanIdentity> result = new List<TsdSpanIdentity>();
 
             List<IMember> members;
             try
             {
-                members = Async.RunSync(ct => m_Model.GetMembersAsync(null, ct), timeoutSeconds, "reading members").ToList();
+                members = Async.RunSync(ct => m_Model.GetMembersAsync(memberIndices, ct), timeoutSeconds, "reading members").ToList();
             }
             catch (Exception e)
             {

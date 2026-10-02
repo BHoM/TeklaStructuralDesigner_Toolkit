@@ -81,6 +81,23 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Pulling a SelectionRequest must return what is selected in Tekla Structural Designer, each object carrying a TeklaStructuralDesignerId fragment, and every Bar among them must be one a pull of all Bars also returns. Select at least one member, slab or wall in Tekla Structural Designer before running.")]
+        public void PullSelection()
+        {
+            var selected = m_Adapter.Pull(new BH.oM.Data.Requests.SelectionRequest()).Cast<BH.oM.Base.IBHoMObject>().ToList();
+
+            selected.ShouldNotBeEmpty("select at least one member, slab or wall in Tekla Structural Designer before running this test");
+            selected.All(o => o.HasAdapterIdFragment(typeof(TeklaStructuralDesignerId))).ShouldBeTrue();
+
+            var allBarIds = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(Bar) }).Cast<Bar>()
+                .Select(b => b.AdapterId<object>(typeof(TeklaStructuralDesignerId)).ToString()).ToList();
+
+            selected.OfType<Bar>().Select(b => b.AdapterId<object>(typeof(TeklaStructuralDesignerId)).ToString()).ShouldBeSubsetOf(allBarIds);
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Pulling bar forces for a simply supported beam under a single gravity combination must be symmetric: equal and opposite major axis shear at the two ends, and zero major axis moment at both ends.")]
         public void SimplySupportedBeamShearAndMomentAreSymmetric()
         {

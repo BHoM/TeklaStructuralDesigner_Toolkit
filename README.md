@@ -33,6 +33,31 @@ This is a **read-only** adapter. Push (Create/Update/Delete) is not supported. W
 | `ILoad`, or a concrete load type | Bar, nodal, area, contour and line loads - see below |
 | `BarResultRequest` / `BarForce` | Bar end forces |
 | `NodeResultRequest` / `NodeReaction`, `NodeDisplacement` | Support reactions and node displacements - see below |
+| `SelectionRequest` | Whatever is selected in Tekla Structural Designer - see below |
+
+### Pulling the selection
+A `SelectionRequest` - what `FilterBySelection` creates in the BHoM UIs - pulls what is selected in
+Tekla Structural Designer at the moment the pull runs, as the same objects a pull by type returns:
+
+| Selected | Pulled |
+| --- | --- |
+| A member | Every Bar of the member, one per span |
+| A span of a member | That Bar |
+| A slab item, roof or wind wall | Its Panel |
+| A slab | The Panels of all its slab items |
+| A structural wall, or one of its panels | The Panels of the wall, or that Panel |
+| A construction point or a support | The Node there |
+| A level | Its Level |
+| A grid line | Its Grid |
+
+Tekla Structural Designer reports a selected slab item together with the slab it belongs to, and a
+member together with its spans, so the more specific wins: a slab whose items are in the selection
+gives only those items' Panels, and likewise for the spans of a member and the panels of a wall.
+
+Only the selected members are read, so picking a few beams out of a large model is quick. Anything
+else that is selected - loads, openings, foundations - is left out and counted in a warning, as is
+anything Tekla Structural Designer reports as merely highlighted or flagged rather than selected by
+the user.
 
 ### Sections, materials and supports
 - **Steel sections** are looked up in the BHoM steel section library (`Structure\SectionProperties`,

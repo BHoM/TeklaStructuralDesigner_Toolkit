@@ -47,6 +47,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (requested != null)
                 spans = spans.Where(s => requested.Contains(s.ObjectId)).ToList();
 
+            return BarsOfSpans(spans, timeout);
+        }
+
+        /***************************************************/
+
+        // The Bars of the given spans, shared by the read by id above and the read of the current
+        // selection.
+        private List<Bar> BarsOfSpans(List<TsdSpanIdentity> spans, int timeout)
+        {
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
             ApplySupports(nodeById, ReadSupports(timeout));
             BarPropertyCache cache = new BarPropertyCache();
