@@ -1,177 +1,282 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{90A6E43A-D2EB-49C6-8D88-115F1806AF8D}</ProjectGuid>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <AssemblyName>TeklaStructuralDesigner_Adapter</AssemblyName>
     <RootNamespace>BH.Adapter.TeklaStructuralDesigner</RootNamespace>
-    <AssemblyName>$(MSBuildProjectName)</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
+    <AssemblyVersion>9.0.0.0</AssemblyVersion>
+    <FileVersion>9.2.0.0</FileVersion>
+    <Description>https://github.com/BHoM/TeklaStructuralDesigner_Toolkit</Description>
+    <Authors>BHoM</Authors>
+    <Copyright>Copyright © https://github.com/BHoM</Copyright>
+    <Configurations>Debug;Release;Test</Configurations>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
+
+  <PropertyGroup>
+    <!-- Flat output directory. Without AppendTargetFrameworkToOutputPath the SDK emits
+         ..\Build\Debug\net48\, which BHoM's CI and the installer do not expect. -->
     <OutputPath>..\Build\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>..\Build\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
+
+  <ItemGroup>
+    <Compile Remove="obj\**" />
+    <EmbeddedResource Remove="obj\**" />
+    <None Remove="obj\**" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Pinned to match the installed Tekla Structural Designer. Hoisted into a property so that
+         moving to another major version is a one line change.
+
+         26.0.1 rather than the newest published package: Tekla's own TSD 2026 SP1 release notes
+         state that 26.0.1 is the Remoting API version for that release, and SP1 (26.1.0.75) is what
+         is deployed. An API newer than the application it talks to is the direction that fails, with
+         "A method has been invoked which is no longer supported in the connected instance".
+
+         The net48 asset uses native (C core) gRPC rather than Grpc.Net.Client, which is why this
+         works on .NET Framework at all. That was true of 24.x and has been re-checked for 26.x,
+         where it is now the only target for which it holds: the net6.0, net8.0 and netstandard2.1
+         assets of the 26.x package moved to managed Grpc.Net.Client 2.67.0, and only the net48 one
+         still declares Grpc 2.46.6. Re-check this, rather than assume it, on the next major. -->
+    <TsdApiVersion>26.0.1</TsdApiVersion>
+    <!-- grpc_csharp_ext is architecture specific, and every host that loads this adapter
+         (Rhino, Excel) is 64 bit. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Needed so the package assets land in the output directory for the deployment target below. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
-  <PropertyGroup Label="TemplateBuilder">
-    <TemplateBuilderTargets Condition=" '$(TemplateBuilderTargets)'=='' ">$([System.IO.Path]::GetFullPath( $(MSBuildProjectDirectory)\..\packages\TemplateBuilder.1.1.6.1\tools\ligershark.templates.targets ))</TemplateBuilderTargets>
-  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TeklaStructuralDesigner.RemotingAPI" Version="$(TsdApiVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TeklaStructuralDesigner_Engine\TeklaStructuralDesigner_Engine.csproj">
+      <Private>False</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\TeklaStructuralDesigner_oM\TeklaStructuralDesigner_oM.csproj">
+      <Private>False</Private>
+    </ProjectReference>
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="Adapter_Engine">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Adapter_Engine.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Adapter_Engine.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Adapter_oM">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Adapter_oM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Adapter_oM.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Analytical_oM">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Analytical_oM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Analytical_oM.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="BHoM">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\BHoM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\BHoM.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="BHoM_Adapter">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\BHoM_Adapter.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\BHoM_Adapter.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="BHoM_Engine">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\BHoM_Engine.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\BHoM_Engine.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
-    <Reference Include="Common_Engine">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Common_Engine.dll</HintPath>
+    <Reference Include="Data_oM">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Data_oM.dll</HintPath>
       <Private>False</Private>
-    </Reference>
-    <Reference Include="Common_oM">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Common_oM.dll</HintPath>
-      <Private>False</Private>
     </Reference>
     <Reference Include="Dimensional_oM">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Dimensional_oM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Dimensional_oM.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Geometry_Engine">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Geometry_Engine.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Geometry_Engine.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Geometry_oM">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Geometry_oM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Geometry_oM.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+    <Reference Include="Library_Engine">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Library_Engine.dll</HintPath>
+      <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Physical_oM">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Physical_oM.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Physical_oM.dll</HintPath>
       <Private>False</Private>
-    </Reference>
-    <Reference Include="Reflection_Engine">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Reflection_Engine.dll</HintPath>
-      <Private>False</Private>
     </Reference>
-    <Reference Include="Reflection_oM">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Reflection_oM.dll</HintPath>
+    <Reference Include="Quantities_oM">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Quantities_oM.dll</HintPath>
+      <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+    <Reference Include="Spatial_Engine">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Spatial_Engine.dll</HintPath>
+      <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+    <Reference Include="Spatial_oM">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Spatial_oM.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Structure_AdapterModules">
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Structure_AdapterModules.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Structure_AdapterModules.dll</HintPath>
       <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Structure_Engine">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Structure_Engine.dll</HintPath>
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Structure_Engine.dll</HintPath>
       <Private>False</Private>
+      <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="Structure_oM">
+      <HintPath>$(ProgramData)\BHoM\Assemblies\Structure_oM.dll</HintPath>
+      <Private>False</Private>
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>C:\ProgramData\BHoM\Assemblies\Structure_oM.dll</HintPath>
-      <Private>False</Private>
     </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="CRUD\Create\Bar.cs" />
-    <Compile Include="CRUD\Create\Material.cs" />
-    <Compile Include="CRUD\Create\Node.cs" />
-    <Compile Include="CRUD\Create\SectionProperty.cs" />
-    <Compile Include="CRUD\Create\_Create.cs" />
-    <Compile Include="CRUD\Delete\_Delete.cs" />
-    <Compile Include="Types\NextId.cs" />
-    <Compile Include="CRUD\Read\Bar.cs" />
-    <Compile Include="CRUD\Read\Material.cs" />
-    <Compile Include="CRUD\Read\Node.cs" />
-    <Compile Include="CRUD\Read\SectionProperty.cs" />
-    <Compile Include="CRUD\Read\_Read.cs" />
-    <Compile Include="CRUD\Update\UpdateObjects.cs" />
-    <Compile Include="TeklaStructuralDesignerAdapter.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Types\Comparer.cs" />
-    <Compile Include="Types\DependencyTypes.cs" />
-  </ItemGroup>
-  <ItemGroup />
-  <ItemGroup>
-    <None Include="Properties\template-builder.props" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\TeklaStructuralDesigner_Engine\TeklaStructuralDesigner_Engine.csproj">
-      <Project>{625C4A3B-A0AB-4B29-B289-4C439B565EFF}</Project>
-      <Name>TeklaStructuralDesigner_Engine</Name>
-      <Private>False</Private>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\TeklaStructuralDesigner_oM\TeklaStructuralDesigner_oM.csproj">
-      <Project>{f55cc8a5-44cb-4333-bc8a-a0eb6775b1a8}</Project>
-      <Name>TeklaStructuralDesigner_oM</Name>
-      <Private>False</Private>
-    </ProjectReference>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Import Project="$(TemplateBuilderTargets)" Condition="Exists('$(TemplateBuilderTargets)')" Label="TemplateBuilder" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
+
+  <!--
+    Deployment.
+
+    The toolkit assembly goes top level into the BHoM assemblies folder, because BHoM's
+    LoadAllAssemblies only scans that directory and only for names ending oM, _Engine or _Adapter.
+
+    The dependency closure is then SPLIT in two, and the split is load bearing.
+
+    Only the BCL shims that share a file name with the shared folder go into the PRIVATE subfolder.
+    The Tekla Structural Designer API itself, the gRPC stack and the native grpc_csharp_ext binaries
+    deploy top level alongside everything else, because normal probing has to be able to find them.
+
+    Why they cannot all be private: BHoM enumerates adapter types at startup, by calling GetTypes()
+    on every assembly in the shared folder. That happens long before any adapter constructor runs,
+    so the AssemblyResolve handler in Adapter/AssemblyResolver.cs - which is registered BY that
+    constructor - is not installed yet. With TSD.API.Remoting.dll reachable only from the private
+    folder, GetTypes() on this assembly throws ReflectionTypeLoadException, BHoM discards the whole
+    assembly, and TeklaStructuralDesignerAdapter never appears in the UI's adapter list at all.
+    Measured against BH.Engine.Base.Query.AdapterTypeList(): 52 adapters with the API private,
+    53 with it top level. Notably every real type in this assembly loads fine, including the adapter
+    itself - the four that fail are compiler generated lambda closures that captured TSD typed
+    locals - so the assembly is lost because GetTypes() THREW, not because anything needed was
+    unloadable. Do not "simplify" this back into a single private folder.
+
+    The shims stay private because they are the ones that actually collide, and nothing needs them
+    until the adapter is running, by which point the resolver is registered. Several of them share a
+    file name with an assembly already in the shared folder that other toolkits bind at a DIFFERENT
+    version. As resolved for API package 26.0.1 -
+
+        Microsoft.Bcl.AsyncInterfaces            6.0.0.0  here vs  5.0.0.0  shared
+        Microsoft.Win32.Registry                 4.0.0.0  here vs  5.0.0.0  shared
+        System.Buffers                           4.0.2.0  here vs  4.0.3.0  shared
+        System.Runtime.CompilerServices.Unsafe   4.0.4.1  here vs  5.0.0.0  shared
+
+        System.Memory                            4.0.1.1  =        4.0.1.1  shared
+        System.Numerics.Vectors                  4.1.3.0  =        4.1.3.0  shared
+        System.Threading.Tasks.Extensions        4.2.0.1  =        4.2.0.1  shared
+
+    Note the direction. Under 24.0.0 our copies were uniformly NEWER than the shared ones; under
+    26.0.1 three of the four are OLDER, because the package moved Microsoft.Bcl.AsyncInterfaces
+    7.0.0 -> 6.0.0 and Microsoft.Win32.Registry 5.0.0 -> 4.0.0 and stopped pinning the rest
+    directly. The conclusion is unchanged and if anything firmer: overwriting the shared copies is
+    now a straight downgrade of assemblies unrelated toolkits depend on, while leaving them alone
+    would stop gRPC binding. Serving our own out of a private folder through
+    Adapter/AssemblyResolver.cs lets both identities coexist, because the .NET Framework loader
+    does not version check an assembly returned from an AssemblyResolve handler - which holds
+    whichever of the two is the newer.
+
+    The last three now match the shared folder exactly, so they are a file name clash only. They
+    are still deployed privately rather than skipped: which of them actually differ is a property
+    of transitive NuGet resolution and moves on any package bump, so the private set is defined by
+    file name, not by a version comparison that would silently change under us.
+
+    That private set is written out EXPLICITLY below rather than discovered by testing which files
+    happen to collide, because discovery would make deployment depend on which other toolkits are
+    installed on the build machine: a developer without ETABS would get Microsoft.Win32.Registry
+    deployed top level, and installing ETABS later would then overwrite it. Anything that collides
+    unexpectedly is still caught, warned about, and deployed privately as a fail safe - so a package
+    bump that introduces a new clash degrades to the safe behaviour instead of overwriting a shared
+    assembly other toolkits depend on.
+
+    Otherwise the source is $(TargetDir) minus this toolkit's own output. That is deliberate: it
+    copies exactly what the SDK resolved, which matters because Grpc.Core's own targets flatten the
+    native grpc_csharp_ext binaries into the output root and MSBuild substitutes the
+    Windows specific runtime assets over the portable ones. Reconstructing that from individual
+    item groups would be a re-implementation of work the SDK has already done correctly.
   -->
+  <Target Name="CopyToBHoM" AfterTargets="PostBuildEvent" Condition="'$(Configuration)' != 'Test'">
+    <PropertyGroup>
+      <BHoMAssembliesDir>$(ProgramData)\BHoM\Assemblies</BHoMAssembliesDir>
+      <TsdPrivateDir>$(BHoMAssembliesDir)\TeklaStructuralDesigner</TsdPrivateDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- The known colliders. Explicit, for the reasons in the comment above. -->
+      <TsdKnownPrivate Include="$(TargetDir)Microsoft.Bcl.AsyncInterfaces.dll;
+                                $(TargetDir)Microsoft.Win32.Registry.dll;
+                                $(TargetDir)System.Buffers.dll;
+                                $(TargetDir)System.Memory.dll;
+                                $(TargetDir)System.Numerics.Vectors.dll;
+                                $(TargetDir)System.Runtime.CompilerServices.Unsafe.dll;
+                                $(TargetDir)System.Threading.Tasks.Extensions.dll" />
+
+      <!-- Everything else the SDK resolved. The non-Windows gRPC natives are dropped rather than
+           deployed: they cannot load on this platform and would only be clutter in a folder shared
+           with every other toolkit. -->
+      <TsdCandidateShared Include="$(TargetDir)**\*.*"
+                          Exclude="$(TargetDir)**\TeklaStructuralDesigner_*;
+                                   $(TargetDir)**\*.pdb;
+                                   $(TargetDir)**\*.so;
+                                   $(TargetDir)**\*.dylib;
+                                   @(TsdKnownPrivate)" />
+
+      <!-- Fail safe: anything not on the known list that nonetheless collides is treated as private
+           rather than written over the shared copy. -->
+      <TsdUnexpectedClash Include="@(TsdCandidateShared)"
+                          Condition="'%(Extension)' == '.dll' And Exists('$(BHoMAssembliesDir)\%(Filename)%(Extension)')" />
+
+      <TsdPrivateDependency Include="@(TsdKnownPrivate);@(TsdUnexpectedClash)" />
+      <TsdSharedDependency Include="@(TsdCandidateShared)" Exclude="@(TsdUnexpectedClash)" />
+
+      <!-- Private-folder files that are no longer part of the private set, left behind by an
+           earlier build against a different API package. The resolver would go on serving these. -->
+      <TsdPrivateStale Include="$(TsdPrivateDir)\**\*.*"
+                       Exclude="@(TsdPrivateDependency->'$(TsdPrivateDir)\%(Filename)%(Extension)')" />
+    </ItemGroup>
+
+    <!-- Fires when a package bump introduces a new shared-folder name clash, so it cannot pass
+         unnoticed. A clash is expected and handled; a clash nobody knows about is not. -->
+    <Warning Condition="'@(TsdUnexpectedClash)' != ''"
+             Text="These Tekla Structural Designer dependencies were about to be deployed top level but share a file name with an assembly already in $(BHoMAssembliesDir): @(TsdUnexpectedClash->'%(Filename)%(Extension)', ', '). They have been deployed to the private folder instead, leaving the shared copies untouched. Confirm that is right, and if it is, add them to TsdKnownPrivate so the decision is recorded rather than rediscovered." />
+
+    <MakeDir Directories="$(TsdPrivateDir)" />
+    <Delete Files="@(TsdPrivateStale)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BHoMAssembliesDir)" />
+    <Copy SourceFiles="@(TsdSharedDependency)"
+          DestinationFiles="@(TsdSharedDependency->'$(BHoMAssembliesDir)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(TsdPrivateDependency)"
+          DestinationFiles="@(TsdPrivateDependency->'$(TsdPrivateDir)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

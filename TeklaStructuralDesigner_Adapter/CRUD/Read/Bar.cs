@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -24,43 +24,80 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using BH.oM.Structure.Elements;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Structure.Constraints;
-using BH.oM.Common.Materials;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
-
         /***************************************************/
-        /**** Private methods                           ****/
+        /****            Private Methods                ****/
         /***************************************************/
 
-        //The List<string> in the methods below can be changed to a list of any type of identification more suitable for the toolkit
-        //If no ids are provided, the convention is to return all elements of the type
-
-        private List<Bar> ReadBars(List<string> ids = null)
+        // One Bar per span (see BarResults.cs for why span, not member, is the unit), with its section
+        // matched to the BHoM library or built from its shape, and its end Nodes carrying their
+        // supports.
+        private List<Bar> ReadBars(IList ids)
         {
-            //Tip: If the software stores depending types such as Nodes and SectionProperties in separate object tables,
-            //it might be a massive preformance boost to read in and store these properties before reading in the bars 
-            //and referenced these stored objects instead of reading them in each time.
-            //For example, a case where 1000 bars share 5 total number of different SectionProperties you want, if possible,
-            //to only read in the section properties 5 times, not 1000. This might of course vary from software to software.
+            int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
 
-            //Implement code for reading bars
-            throw new NotImplementedException();
+            List<TsdSpanIdentity> spans = BuildSpanIdentities(timeout);
+
+            HashSet<string> requested = RequestedIds(ids);
+            if (requested != null)
+                spans = spans.Where(s => requested.Contains(s.ObjectId)).ToList();
+
+            return BarsOfSpans(spans, timeout);
         }
 
         /***************************************************/
 
+        // The Bars of the given spans, shared by the read by id above and the read of the current
+        // selection.
+        private List<Bar> BarsOfSpans(List<TsdSpanIdentity> spans, int timeout)
+        {
+            Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
+            ApplySupports(nodeById, ReadSupports(timeout));
+            BarPropertyCache cache = new BarPropertyCache();
+
+            List<Bar> bars = new List<Bar>();
+            int skipped = 0;
+
+            foreach (TsdSpanIdentity span in spans)
+            {
+                Bar bar;
+                if (TryBuildBar(span, nodeById, cache, out bar))
+                    bars.Add(bar);
+                else
+                    skipped++;
+            }
+
+            if (skipped > 0)
+                Engine.Base.Compute.RecordWarning(skipped + " span(s) could not be resolved to Bar geometry because one or both end points were missing, and have been skipped.");
+
+            cache.Report();
+
+            return bars;
+        }
+
+        /***************************************************/
+
+        // The Bar of a span, or false if either of the span's ends could not be resolved to a Node.
+        private static bool TryBuildBar(TsdSpanIdentity span, Dictionary<Guid, Node> nodeById, BarPropertyCache cache, out Bar bar)
+        {
+            bar = null;
+
+            Node start, end;
+            if (span.StartPointId == Guid.Empty || span.EndPointId == Guid.Empty ||
+                !nodeById.TryGetValue(span.StartPointId, out start) || !nodeById.TryGetValue(span.EndPointId, out end))
+            {
+                return false;
+            }
+
+            bar = span.ToBHoM(start, end, cache);
+            return true;
+        }
+
+        /***************************************************/
     }
 }
-
-
-
-
-
