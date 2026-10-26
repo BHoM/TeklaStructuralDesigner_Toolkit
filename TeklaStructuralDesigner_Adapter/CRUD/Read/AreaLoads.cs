@@ -124,7 +124,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
                 else if (load is IPointLoad)
                 {
-                    skipReason = "they are point loads on a plane, and BHoM has no point load that is not applied to a Node";
+                    skipReason = "they are point loads on a slab or other plane, which are not supported at the moment: BHoM has no point load type for a point on a Panel (PointLoad needs a Node, BarPointLoad a Bar), so these loads are missing from the pull - see the toolkit README";
                 }
                 else if (load is IVariableAreaElementLoad || load is IVariablePolygonalLoad)
                 {

@@ -28,6 +28,7 @@ using BH.Engine.Base;
 using BH.Engine.Geometry;
 using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Geometry;
+using BH.oM.Structure.Constraints;
 using BH.oM.Structure.Elements;
 using BH.oM.Structure.MaterialFragments;
 using BH.oM.Structure.SurfaceProperties;
@@ -44,6 +45,18 @@ namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
+        /***************************************************/
+        /****            Private Fields                 ****/
+        /***************************************************/
+
+        // Angles (in radians) and unit vector lengths below this are zero when deciding which way an
+        // element spans.
+        private const double SpanAngleTolerance = 1e-4;
+
+        // Distance (in metres) within which a wall panel's bottom edge is at the base of its wall, and a
+        // Panel edge is the bottom edge it was built from - the millimetre precision used elsewhere.
+        private const double WallBaseTolerance = 1e-3;
+
         /***************************************************/
         /****            Private Methods                ****/
         /****            (Panels)                       ****/
@@ -213,7 +226,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     ElementGroupName = item.ElementGroupName ?? "",
                 };
 
-                BHoMVector localX = SpanDirection(plane);
+                BHoMVector localX = SpanDirection(item, plane, state);
                 BHoMVector normal = Normal(plane);
 
                 int built = 0;
@@ -288,6 +301,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 TsdPlane wallPlane = wall.ElementPlane.ValueOrDefault();
                 BHoMVector wallNormal = wallPlane != null ? Normal(wallPlane) : null;
 
+                // The support the wall generates along its base, carried by the bottom edge of every wall
+                // panel that sits at the base.
+                Constraint6DOF baseSupport = WallBaseSupport(wallData, state);
+                double baseZ = wallPanels
+                    .Select(p => p.BottomSegment.ValueOrDefault())
+                    .Where(s => s != null)
+                    .SelectMany(s => new[] { s.GetPoint(Location.Start).ToBHoMPoint().Z, s.GetPoint(Location.End).ToBHoMPoint().Z })
+                    .DefaultIfEmpty(double.NaN)
+                    .Min();
+                bool baseSupported = false;
+
                 foreach (IStructuralWallPanel wallPanel in wallPanels)
                 {
                     ISegment3D bottom = wallPanel.BottomSegment.ValueOrDefault();
@@ -328,6 +352,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         continue;
                     }
 
+                    if (baseSupport != null && Math.Max(b0.Z, b1.Z) - baseZ < WallBaseTolerance && SupportEdge(panel, b0, b1, baseSupport))
+                        baseSupported = true;
+
                     result.Add(panel.SetIdentity(id, wallPanel.Id, new TeklaStructuralDesignerPanelProperties
                     {
                         ElementType = "StructuralWall",
@@ -339,9 +366,80 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         ElementGroupName = wall.ElementGroupName ?? "",
                     }));
                 }
+
+                if (baseSupport != null && !baseSupported)
+                    state.Warn("wall(s) generate a support along their base, but no wall panel edge was found there to carry it, so they have been pulled unsupported");
             }
 
             return result;
+        }
+
+        /***************************************************/
+
+        // The support a structural wall generates along its base, or null if it generates none.
+        //
+        // Tekla Structural Designer holds this on the wall itself - its GenerateSupport switch and
+        // SupportData - not as a support on a construction point, so it is not among the supports the
+        // Nodes are pulled with, and walls used to be pulled free at their base. A BHoM Panel carries a
+        // line support on the Support of an external edge, which Robot applies to that edge of the
+        // panel. The SupportData is the same type as a point support's, so it is converted the same way,
+        // with springs and partial fixity reported rather than converted.
+        //
+        // AutomaticGenerateSupport leaves Tekla Structural Designer to decide whether the wall is
+        // supported. Where it is switched on and GenerateSupport reports no support, that is taken as
+        // Tekla Structural Designer's decision, but it has not been checked against a live model, so it
+        // is warned about.
+        private static Constraint6DOF WallBaseSupport(IStructuralWallData wallData, PanelReadState state)
+        {
+            if (wallData == null)
+                return null;
+
+            if (!wallData.GenerateSupport.ValueOrDefault(false))
+            {
+                if (wallData.AutomaticGenerateSupport.ValueOrDefault(false))
+                    state.Warn("wall(s) leave Tekla Structural Designer to decide whether they generate a base support, and it reported none, so they have been pulled unsupported at the base. Check this against the model");
+
+                return null;
+            }
+
+            bool isPartial;
+            Constraint6DOF support = wallData.SupportData.ValueOrDefault().ToBHoM(out isPartial);
+            if (support == null)
+            {
+                state.Warn("wall(s) generate a base support but Tekla Structural Designer reported no fixity for it, so they have been pulled unsupported at the base");
+                return null;
+            }
+
+            if (isPartial)
+                state.Warn("wall base support(s) have spring or partial fixity in at least one direction. Their fixed and free directions have been pulled, but the springs have not");
+
+            return support;
+        }
+
+        /***************************************************/
+
+        // Puts the support on the external edge of the Panel running between start and end, in either
+        // direction - found by its end points, because Convert.ToBHoMPanel may have reversed the outline
+        // or started it elsewhere. False if no edge runs between them.
+        private static bool SupportEdge(Panel panel, BHoMPoint start, BHoMPoint end, Constraint6DOF support)
+        {
+            foreach (Edge edge in panel.ExternalEdges ?? new List<Edge>())
+            {
+                if (edge?.Curve == null)
+                    continue;
+
+                BHoMPoint edgeStart = edge.Curve.IStartPoint();
+                BHoMPoint edgeEnd = edge.Curve.IEndPoint();
+
+                if ((edgeStart.Distance(start) < WallBaseTolerance && edgeEnd.Distance(end) < WallBaseTolerance) ||
+                    (edgeStart.Distance(end) < WallBaseTolerance && edgeEnd.Distance(start) < WallBaseTolerance))
+                {
+                    edge.Support = support;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /***************************************************/
@@ -467,8 +565,16 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
 
                 TsdPlane plane = element.ElementPlane.ValueOrDefault();
-                BHoMVector span = plane != null ? SpanDirection(plane) : null;
                 BHoMVector normal = plane != null ? Normal(plane) : null;
+                BHoMVector span = null;
+                if (plane != null)
+                    span = roof != null ? SpanDirection(element, plane, state) : PlaneX(plane);
+
+                // Wind wall span direction is not supported: the API does not report a wind wall's
+                // rotation angle, so a wind wall keeps the x axis of its element plane, and every one
+                // pulled is warned about.
+                if (roof == null)
+                    state.Warn("wind wall(s) have been pulled spanning along the x axis of their element plane, which is horizontal along the wall. Wind wall span direction is not supported at the moment: Tekla Structural Designer's API does not report a wind wall's rotation angle, so a wind wall rotated in Tekla Structural Designer - 90 degrees to span vertically between floors - will span the wrong way. Check the cladding direction of every wind wall in the receiving model");
 
                 Panel panel = Convert.ToBHoMPanel(Convert.ClosedPolyline(points), null, null, span, normal, element.Name);
                 if (panel == null)
@@ -477,7 +583,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     continue;
                 }
 
-                panel.Property = state.LoadingPanelProperty(panel.SpanReferenceEdge(span));
+                panel.Property = state.LoadingPanelProperty();
 
                 IRoofData roofData = roof != null ? roof.RoofData.ValueOrDefault() : null;
                 result.Add(panel.SetIdentity(element.Name, element.Id, new TeklaStructuralDesignerPanelProperties
@@ -497,17 +603,82 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The direction an area element spans in: the x axis of its element plane, which the API
-        // documents as respecting the element's orientation - that is, already turned through the
-        // element's RotationAngle. On the test model every slab item and roof had a RotationAngle of 0
-        // and an element plane x along global X, so a rotated element is still to be checked.
+        // The direction a slab item or roof spans in: the x axis of its element plane, turned through the
+        // element's RotationAngle where the plane has not already been.
         //
-        // Wind walls have no RotationAngle - the API reports it as not applicable - so for them this is
-        // simply the horizontal axis of the wall's plane.
-        private static BHoMVector SpanDirection(TsdPlane plane)
+        // The API documents the element plane as respecting the element's orientation, but project
+        // models tested in October 2026 showed rotated slab items whose element plane x had not been
+        // turned: slab items that all spanned the same way, and terrace slabs a quarter turn out. So the
+        // plane's x is compared with the element's unrotated direction, global X laid onto its plane:
+        //  - if they agree and the element has a RotationAngle, the plane has not been turned, and the
+        //    rotation is applied here, anticlockwise about the element's normal;
+        //  - if the plane's x is already turned by the RotationAngle, it is used as it is, so the rotation
+        //    is never applied twice;
+        //  - if it is neither, which can happen on a sloped plane whose x is not global X laid onto the
+        //    slope, the plane is taken as it is, with a warning.
+        // Only a quarter turn has been seen on a live model, which reads the same whichever way the
+        // rotation is measured; other angles assume anticlockwise about the normal.
+        //
+        // Wind walls do not come through here. Checked on a live Tekla Structural Designer 2026 SP1
+        // model, every wind wall reports its RotationAngle as not applicable, with no value behind it -
+        // including one shown in Tekla Structural Designer at 90 degrees - so a wind wall simply keeps
+        // the x axis of its element plane; see ReadLoadingPanels.
+        private static BHoMVector SpanDirection(TsdAreaElement element, TsdPlane plane, PanelReadState state)
+        {
+            BHoMVector x = PlaneX(plane);
+            if (x == null)
+                return null;
+
+            BHoMVector normal = Normal(plane);
+            BHoMVector unrotated = normal == null ? null : GlobalXOnPlane(normal);
+            if (unrotated == null || element.RotationAngle == null || !element.RotationAngle.IsApplicable)
+                return x;
+
+            double rotationAngle = element.RotationAngle.Value;
+            if (Math.Abs(rotationAngle) < SpanAngleTolerance)
+                return x;
+
+            double offset = AxisAngle(x, unrotated);
+            if (offset < SpanAngleTolerance)
+                return x.Rotate(rotationAngle, normal).Normalise();
+
+            double turned = Math.Abs(rotationAngle) % Math.PI;
+            turned = Math.Min(turned, Math.PI - turned);
+            if (Math.Abs(offset - turned) > SpanAngleTolerance)
+                state.Warn("rotated slab item(s) or roof(s) have an element plane that is neither in their unrotated direction nor turned through their rotation angle, so their span direction has been taken from the plane as Tekla Structural Designer reports it");
+
+            return x;
+        }
+
+        /***************************************************/
+
+        // The unrotated span direction of a slab item or roof: global X laid onto its plane. Null for a
+        // plane square to global X, which has no such direction.
+        private static BHoMVector GlobalXOnPlane(BHoMVector normal)
+        {
+            BHoMVector globalX = new BHoMVector { X = 1 };
+            BHoMVector onPlane = globalX - normal * globalX.DotProduct(normal);
+            return onPlane.Length() < SpanAngleTolerance ? null : onPlane.Normalise();
+        }
+
+        /***************************************************/
+
+        // The x axis of an element plane as Tekla Structural Designer reports it, or null if it reports
+        // none.
+        private static BHoMVector PlaneX(TsdPlane plane)
         {
             BHoMVector x = plane.LCS.ValueOrDefault().Axes.XAxis.ToBHoMVector();
             return x.Length() > 0 ? x.Normalise() : null;
+        }
+
+        /***************************************************/
+
+        // The angle between two directions as axes, ignoring which way along them each points: 0 to a
+        // quarter turn.
+        private static double AxisAngle(BHoMVector a, BHoMVector b)
+        {
+            double angle = a.Angle(b);
+            return Math.Min(angle, Math.PI - angle);
         }
 
         /***************************************************/
@@ -559,23 +730,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return property;
             }
 
-            // A one way LoadingPanelProperty per reference edge. TwoSides is BHoM's one way load
-            // distribution: the load goes to the two sides the span runs between.
-            public LoadingPanelProperty LoadingPanelProperty(int referenceEdge)
+            // The one way LoadingPanelProperty every roof and wind wall shares. TwoSides is BHoM's one way
+            // load distribution: the load goes to the two sides the span runs between. ReferenceEdge 1 is
+            // the Panel's first external edge, which Convert.ToBHoMPanel makes the edge along the span.
+            public LoadingPanelProperty LoadingPanelProperty()
             {
-                LoadingPanelProperty property;
-                if (!m_LoadingProperties.TryGetValue(referenceEdge, out property))
+                if (m_LoadingProperty == null)
                 {
-                    property = new LoadingPanelProperty
+                    m_LoadingProperty = new LoadingPanelProperty
                     {
-                        Name = "One way loading panel (edge " + referenceEdge + ")",
+                        Name = "One way loading panel",
                         LoadApplication = LoadPanelSupportConditions.TwoSides,
-                        ReferenceEdge = referenceEdge,
+                        ReferenceEdge = 1,
                     };
-                    m_LoadingProperties[referenceEdge] = property;
                 }
 
-                return property;
+                return m_LoadingProperty;
             }
 
             public void Skip(string what, string reason)
@@ -588,6 +758,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 Count(m_Approximated, reason);
             }
 
+            // Anything else worth a counted warning, given as a sentence that follows its count.
+            public void Warn(string message)
+            {
+                Count(m_Warned, message);
+            }
+
             public void Report()
             {
                 foreach (KeyValuePair<string, int> skipped in m_Skipped)
@@ -596,13 +772,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 foreach (KeyValuePair<string, int> approximated in m_Approximated)
                     Engine.Base.Compute.RecordWarning(approximated.Value + " slab item(s) have been approximated: " + approximated.Key + ".");
 
+                foreach (KeyValuePair<string, int> warned in m_Warned)
+                    Engine.Base.Compute.RecordWarning(warned.Value + " " + warned.Key + ".");
+
                 Materials.Report();
             }
 
             private readonly Dictionary<string, ISurfaceProperty> m_Properties = new Dictionary<string, ISurfaceProperty>();
-            private readonly Dictionary<int, LoadingPanelProperty> m_LoadingProperties = new Dictionary<int, LoadingPanelProperty>();
+            private LoadingPanelProperty m_LoadingProperty;
             private readonly Dictionary<string, int> m_Skipped = new Dictionary<string, int>();
             private readonly Dictionary<string, int> m_Approximated = new Dictionary<string, int>();
+            private readonly Dictionary<string, int> m_Warned = new Dictionary<string, int>();
         }
 
         /***************************************************/

@@ -131,6 +131,62 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Gravity load on a horizontal beam must come back as major axis shear (FZ), not minor (FY). SimplySupportedBeamShearAndMomentAreSymmetric cannot tell the two apart - with the axes transposed its FZ and MY are both near zero and it still passes - so this is the test that settles the axis mapping. If it fails with FY carrying the shear, set SwapMajorMinorAxes and change the default.")]
+        public void GravityBendingIsMajorAxis()
+        {
+            // Same placeholder member and combination as SimplySupportedBeamShearAndMomentAreSymmetric.
+            string memberObjectId = "B1:0";
+            string combinationName = "1";
+
+            var request = new BarResultRequest
+            {
+                ResultType = BarResultType.BarForce,
+                ObjectIds = new System.Collections.Generic.List<object> { memberObjectId },
+                Cases = new System.Collections.Generic.List<object> { combinationName },
+                Divisions = 2,
+            };
+
+            var results = m_Adapter.ReadResults(request).Cast<BarForce>().ToList();
+            results.Count.ShouldBe(2);
+
+            foreach (BarForce end in results)
+            {
+                System.Math.Abs(end.FZ).ShouldBeGreaterThan(1.0, "the end shear of a gravity loaded beam should be major axis shear, FZ");
+                System.Math.Abs(end.FY).ShouldBeLessThan(System.Math.Abs(end.FZ) / 100, "a gravity loaded beam should carry next to no minor axis shear, FY");
+            }
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Every roof and wind wall must be a one way loading panel whose ReferenceEdge is 1 and whose first external edge runs along its local x, the span. Robot reads a LoadingPanelProperty's direction only from whether ReferenceEdge is odd (local x) or even (local y), so a span edge anywhere else in the outline turned the span a quarter turn in Robot.")]
+        public void LoadingPanelsSpanAlongTheirFirstEdge()
+        {
+            var panels = m_Adapter.Pull(new BH.oM.Data.Requests.FilterRequest { Type = typeof(Panel) }).Cast<Panel>()
+                .Where(p => p.Property is BH.oM.Structure.SurfaceProperties.LoadingPanelProperty)
+                .ToList();
+
+            panels.ShouldNotBeEmpty("the test model needs at least one roof or wind wall");
+
+            foreach (Panel panel in panels)
+            {
+                ((BH.oM.Structure.SurfaceProperties.LoadingPanelProperty)panel.Property).ReferenceEdge.ShouldBe(1);
+
+                BH.oM.Geometry.Vector localX = BH.Engine.Structure.Query.LocalOrientation(panel).X;
+                // The outline is a polyline, so each external edge is one straight Line.
+                BH.oM.Geometry.Line edge = (BH.oM.Geometry.Line)panel.ExternalEdges[0].Curve;
+                BH.oM.Geometry.Point start = edge.Start;
+                BH.oM.Geometry.Point end = edge.End;
+                double length = System.Math.Sqrt(System.Math.Pow(end.X - start.X, 2) + System.Math.Pow(end.Y - start.Y, 2) + System.Math.Pow(end.Z - start.Z, 2));
+                double alignment = System.Math.Abs((end.X - start.X) * localX.X + (end.Y - start.Y) * localX.Y + (end.Z - start.Z) * localX.Z) / length;
+
+                alignment.ShouldBeGreaterThan(0.7, "the first edge of '" + panel.Name + "' should run along its span, local x");
+            }
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("The Auto and SpanEnds force sources must agree, within a generous tolerance, for the same span and case - if they do not, the batched solver route's assumptions (element ordering, axis mapping) are wrong for this model and SwapMajorMinorAxes or BarForceSource needs attention.")]
         public void SolverAndSpanEndRoutesAgree()
         {

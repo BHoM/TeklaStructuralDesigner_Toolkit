@@ -106,10 +106,14 @@ Pulling `Panel` returns every 2D element in the model. Each carries a `TeklaStru
 (the element name, or `WallName:PanelIndex` for a wall panel) and a
 `TeklaStructuralDesignerPanelProperties` fragment saying what it was pulled from.
 
-- **Span direction is the Panel's local x** for every kind of panel: it is taken from the element
-  plane Tekla Structural Designer reports, which already includes the element's rotation angle, and
-  set through the Panel's `OrientationAngle`. Directional properties (`SlabOnDeck`, `HollowCore`) run
-  along local x.
+- **Span direction is the Panel's local x** for every kind of panel, set through the Panel's
+  `OrientationAngle`. For slab items and roofs it is the x axis of the element plane Tekla Structural
+  Designer reports, turned through the element's rotation angle. The API documents that plane as
+  already including the rotation, but tested models showed rotated slabs whose plane had not been
+  turned, so the rotation is applied wherever the plane still runs along global X, and never twice.
+  An element whose plane is in neither direction, which can happen on a sloped plane, is taken as the
+  plane gives it, with a warning. Directional properties (`SlabOnDeck`, `HollowCore`) run along
+  local x.
 - **Slab items** become one Panel each, outlined by their complete contour: slab openings are
   Openings and column drops are cut out. Column drops are Panels of their own with
   `PanelType.DropPanel`. Every slab is a `ConstantThickness` of its overall depth by default, because
@@ -125,12 +129,29 @@ Pulling `Panel` returns every 2D element in the model. Each carries a `TeklaStru
   fragment's `SpanType`.
 - **Structural walls** become one Panel per wall panel, between its bottom and top edges, with a
   `ConstantThickness` wall property and local x running horizontally along the wall. Wall openings
-  become Openings; one that straddles two wall panels is left out, with a warning.
+  become Openings; one that straddles two wall panels is left out, with a warning. A wall that
+  generates a support along its base (Tekla Structural Designer's *Generate support*) carries it as
+  the `Support` of the bottom edge of each wall panel at its base - a line support, which Robot
+  applies to that panel edge. That support lives on the wall rather than on a construction point, so
+  it is not among the Nodes' supports. Spring and partial fixity are reported rather than converted,
+  as for point supports. A wall left to decide its own support automatically that reports none is
+  pulled unsupported, with a warning.
 - **Roofs and wind walls** are loading panels: a `LoadingPanelProperty` with no material or
-  thickness, spanning one way (`LoadApplication = TwoSides`), with `ReferenceEdge` set to the edge
-  running most nearly along the span. The Panel's normal matches the element's in Tekla Structural
-  Designer, which for a wind wall is the direction the wind acts in. Tekla Structural Designer
-  exposes no span direction for wind walls, so their local x is simply horizontal along the wall.
+  thickness, spanning one way (`LoadApplication = TwoSides`) along local x. Each Panel's outline is
+  started at the edge running along the span, so that edge is its first external edge and
+  `ReferenceEdge` is always 1. That matters for Robot, which reads only whether `ReferenceEdge` is odd
+  (one way along local x) or even (along local y): when the reference edge was wherever the span edge
+  fell in the outline, some roofs and wind walls spanned the wrong way in Robot. The Panel's normal
+  matches the element's in Tekla Structural Designer, which for a wind wall is the direction the wind
+  acts in.
+- **Wind wall span direction is not supported at the moment.** A wind wall spans along the x axis of
+  its element plane as Tekla Structural Designer reports it, which is horizontal along the wall, to
+  the columns either side. Tekla Structural Designer's API does not report a wind wall's rotation
+  angle - checked on a 2026 SP1 model, every wind wall reports it as not applicable, whatever Tekla
+  Structural Designer shows - so a wind wall rotated in Tekla Structural Designer (90 degrees, spanning
+  vertically between floors) comes through spanning horizontally and distributes its load to the
+  wrong members. Every pull that includes wind walls warns about this; check the cladding direction of
+  every wind wall in the receiving model and correct any rotated ones there.
 
 ### Levels and grids
 - **Levels** are Tekla Structural Designer's horizontal construction planes, pulled as
@@ -156,6 +177,7 @@ Area loads map onto the Panels (see [Panels](#panels)):
 | Uniform load on a slab item, slab, wall, roof or wind wall | `AreaUniformlyDistributedLoad` on the Panels pulled for that element |
 | Uniform rectangular or polygonal patch load | `ContourLoad` over its outline, placed in 3D on its construction plane |
 | Uniform line load on a plane | `GeometricalLineLoad` |
+| Point load on a plane (on a slab, between members) | **Not pulled** - see below |
 
 **Push the Panels and the area loads in the same Push.** An `AreaUniformlyDistributedLoad` refers to
 its Panels, and the receiving package has to recognise those Panels as ones in its model. For bar
@@ -173,6 +195,17 @@ as member loads (global Z positive downwards in Tekla Structural Designer, so gr
 global directions are converted; a load measured in projection is `Projected`. Point loads on a
 plane, varying area and polygonal loads, perimeter loads, and loads on vertical construction planes
 are skipped with a counted warning. Snow, diaphragm, temperature and settlement loads are not read.
+
+**Point loads on a slab are not supported at the moment.** A point load drawn on a slab or other
+plane in Tekla Structural Designer - rather than on a member or a construction point - is left out of
+the pull, so it will be missing from whatever the loads are pushed to; the pull's warning says how
+many were skipped. BHoM has no load type for a force at a point on a Panel: `PointLoad` needs a Node
+and `BarPointLoad` a Bar, and there is no `GeometricalPointLoad` to sit alongside
+`GeometricalLineLoad`. Robot itself can take such a load, but until BHoM and the Robot toolkit have a
+type for it, add these loads by hand in the receiving model, or redraw them in Tekla Structural
+Designer as small patch loads, which are pulled as `ContourLoad`s. Pulling with
+`IncludeDerivedLoads` brings in the member loads Tekla Structural Designer decomposes them into, but
+also every other derived load, which double counts the slab and area loads already pulled.
 
 Four things are worth knowing before trusting a pulled load:
 
@@ -285,10 +318,14 @@ assemblies. **Close them before rebuilding**, or the post-build copy fails with 
 ### A note on axis convention
 `TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` exists because the mapping from Tekla Structural
 Designer's local `y`/`z` axes onto BHoM's major/minor axis convention has not been confirmed against a
-live, solved model as of this toolkit's initial port. The default (`false`) is BHoM's own stated
-convention (`MY` major axis bending, `MZ` minor axis bending). If a model with a known correct answer
-shows the mapping is transposed, set this `true` - and please raise an issue or PR updating the default,
-since every user of this toolkit is affected the same way.
+live, solved model. The API does not document which local axis is major. The default (`false`) is
+BHoM's own stated convention (`MY` major axis bending, `MZ` minor axis bending), which the column check
+under [Member orientation](#member-orientation) and the section orientation both point to. One tester,
+on Tekla Structural Designer 2024 against the 2026 API, found `MZ` matching the major axis moment of a
+beam instead. The `GravityBendingIsMajorAxis` test settles it: run it on an analysed model with a
+gravity loaded beam. If it shows the mapping is transposed, set this `true`, and change the default,
+together with the release mapping in `Convert/ToBHoM/BarRelease.cs` and local member load directions in
+`Convert/ToBHoM/Load.cs`, which rest on the same assumption.
 
 ### Member orientation
 A Bar's `OrientationAngle` comes from Tekla Structural Designer's `GlobalRotationAngle`, which is

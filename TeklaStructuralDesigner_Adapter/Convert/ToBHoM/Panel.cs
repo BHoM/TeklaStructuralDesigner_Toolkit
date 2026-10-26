@@ -62,6 +62,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // order of its edges - points the same way as the element's in Tekla Structural Designer. That
         // matters most for wind walls, whose normal is the direction the wind pressure acts in.
         //
+        // The outline is also started at the edge running most nearly along localX, so that the Panel's
+        // first external edge runs along the span. A one way LoadingPanelProperty names its direction by
+        // an edge, and Robot reads that edge only by whether its number is odd (one way along local x)
+        // or even (along local y), not by its geometry: so the span edge is made edge 1, and both
+        // readings agree. Before this, the edge was found wherever it fell in the outline, and roofs and
+        // wind walls whose outline happened to start on a cross edge spanned the wrong way in Robot.
+        //
         // The Panel is built by Structure.Create.Panel without a localX: given one, Create.Panel finds
         // the Panel's normal through BHoM's run time extension method lookup, which throws when that
         // lookup cannot see Structure_Engine - as happened when the adapter was driven from outside a
@@ -80,6 +87,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 outline = outline.Flip();
                 outlineNormal = outlineNormal.Reverse();
             }
+
+            if (localX != null && localX.Length() > 0)
+                outline = outline.StartAlong(localX);
 
             List<ICurve> openings = (holes ?? Enumerable.Empty<Polyline>())
                 .Where(h => h != null && h.ControlPoints.Count >= 4)
@@ -157,37 +167,40 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Index of the external edge running most nearly along the span. A LoadingPanelProperty spanning
-        // one way takes its direction from one of the Panel's edges rather than from its local axes, so
-        // the edge has to be found on the Panel as built - after any reversal of its outline.
-        public static int SpanReferenceEdge(this Panel panel, Vector spanDirection)
-        {
-            if (panel == null || panel.ExternalEdges == null || spanDirection == null || spanDirection.Length() == 0)
-                return 0;
+        /***************************************************/
+        /****            Private Methods                ****/
+        /***************************************************/
 
-            Vector span = spanDirection.Normalise();
+        // The same closed outline, started at the vertex that makes its first edge the one running most
+        // nearly along direction. Where two edges are equally aligned, the earlier one is kept, so an
+        // outline that already starts along the span is returned unchanged.
+        private static Polyline StartAlong(this Polyline outline, Vector direction)
+        {
+            List<Point> vertices = outline.ControlPoints.Take(outline.ControlPoints.Count - 1).ToList();
+            Vector along = direction.Normalise();
             int best = 0;
             double bestAlignment = -1;
 
-            for (int i = 0; i < panel.ExternalEdges.Count; i++)
+            for (int i = 0; i < vertices.Count; i++)
             {
-                ICurve curve = panel.ExternalEdges[i].Curve;
-                if (curve == null)
+                Vector edge = vertices[(i + 1) % vertices.Count] - vertices[i];
+                if (edge.Length() == 0)
                     continue;
 
-                Vector along = curve.IEndPoint() - curve.IStartPoint();
-                if (along.Length() == 0)
-                    continue;
-
-                double alignment = Math.Abs(along.Normalise().DotProduct(span));
-                if (alignment > bestAlignment)
+                double alignment = Math.Abs(edge.Normalise().DotProduct(along));
+                if (alignment > bestAlignment + 1e-9)
                 {
                     bestAlignment = alignment;
                     best = i;
                 }
             }
 
-            return best;
+            if (best == 0)
+                return outline;
+
+            List<Point> reordered = vertices.Skip(best).Concat(vertices.Take(best)).ToList();
+            reordered.Add(reordered[0]);
+            return new Polyline { ControlPoints = reordered };
         }
 
         /***************************************************/

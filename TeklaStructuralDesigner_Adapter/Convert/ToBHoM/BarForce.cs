@@ -40,10 +40,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // Units: the API documents IForce3DLocal's forces in N and its moments in N.mm, so only the
         // moments are scaled - see Convert/Units.cs. Nothing is rounded.
         //
-        // Axes: the API documents Fy as the minor axis shear, Fz the major axis shear, My the major
-        // axis moment and Mz the minor, which is BH.oM.Structure.Results.BarForce's own convention.
-        // TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes remains as an escape hatch for a model
-        // that demonstrates otherwise - see the toolkit README.
+        // Axes: the API documents IForce3DLocal only as forces "with respect to element local coordinate
+        // system", without saying which local axis is major. The mapping here - Fy minor axis shear, Fz
+        // major, My major axis moment, Mz minor, BH.oM.Structure.Results.BarForce's own convention - is
+        // the one the column check in Convert/ToBHoM/Bar.cs and the section orientation both point to.
+        // It is still unconfirmed for beams: one tester (on Tekla Structural Designer 2024, against a
+        // 2026 API) found MZ matching Tekla Structural Designer's major axis moment. The
+        // GravityBendingIsMajorAxis test settles it on a live model; until it has,
+        // TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes is the escape hatch - see the README.
         public static BarForce ToBHoM(this IForce3DLocal force, string objectId, int resultCase, double position, int divisions, bool swapMajorMinorAxes)
         {
             double fx = force.Fx;
