@@ -28,32 +28,14 @@ using System.Runtime.CompilerServices;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // A handful of BCL shims from the Tekla Structural Designer dependency chain are deployed to a
-    // private subfolder of the BHoM assemblies folder rather than alongside the BHoM assemblies,
-    // because they collide by version with assemblies other toolkits bind. See the deployment
-    // comment in TeklaStructuralDesigner_Adapter.csproj for the full reasoning.
-    //
-    // Note the narrow scope: this resolver serves ONLY those shims. TSD.API.Remoting itself and the
-    // gRPC stack deploy top level and are found by ordinary probing, which they have to be - BHoM
-    // enumerates adapter types at startup, before any constructor has run and therefore before this
-    // resolver is registered, and an assembly whose GetTypes() throws there is discarded entirely.
-    // Moving the API back into the private folder makes the adapter vanish from the UI.
-    //
-    // Because the shims are not next to this assembly, normal directory probing will not find them,
-    // so this resolver is required rather than defensive. It is safe to the extent that it only ever
-    // answers for files physically present in our own folder, and returns null for everything else,
-    // so it cannot intercept another toolkit's binding.
-    //
-    // BHoM's own resolver cannot serve this: BH.Engine.Base.Global.ResolveBHoMAssembly gates on
-    // Assembly.GetCallingAssembly().Location, which inside a CLR invoked AssemblyResolve handler is
-    // mscorlib rather than the requesting assembly.
-    //
-    // Registration is an explicit call rather than a module initialiser because [ModuleInitializer]
-    // is C# 9 and this project is pinned to LangVersion 7.3.
+    // Loads the BCL shims deployed to the private TeklaStructuralDesigner subfolder (see "Deployment" in
+    // the README). It only answers for files in that folder, so cannot intercept another toolkit's
+    // binding. BHoM's own resolver cannot serve them, as it checks the calling assembly, which is
+    // mscorlib inside an AssemblyResolve handler.
     internal static class AssemblyResolver
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
         private static readonly object m_Lock = new object();
@@ -61,7 +43,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         private static bool m_Registered = false;
 
         /***************************************************/
-        /****            Internal Methods               ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         internal static string PrivateFolder
@@ -76,10 +58,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Must run before the JIT resolves any Tekla Structural Designer metadata token. Guaranteed by
-        // calling it as the first statement of the adapter constructor and keeping every TSD type out
-        // of that constructor's body; the methods that do touch TSD types are marked NoInlining so
-        // their metadata is not resolved while the constructor is being compiled.
+        // Must run before any Tekla Structural Designer type is touched: it is the adapter constructor's
+        // first statement, and the methods using those types are NoInlining.
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal static void EnsureRegistered()
         {
@@ -101,7 +81,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
         private static Assembly Resolve(object sender, ResolveEventArgs args)
@@ -130,7 +110,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
                 string candidate = Path.Combine(PrivateFolder, simpleName + ".dll");
                 if (!File.Exists(candidate))
-                    return null;                    // Not one of ours. Let other handlers try.
+                    return null;                    // Not one of ours.
 
                 try
                 {

@@ -225,7 +225,7 @@ Four things are worth knowing before trusting a pulled load:
 - **Unit scaling is inferred, not confirmed.** Loads are converted assuming Tekla Structural Designer
   reports them in newtons and millimetres, which is the convention its *results* demonstrably use. If
   pulled loads come back a thousand times too large or too small, that assumption does not hold for
-  applied loads; the fix belongs in the scale constants at the top of `Convert/ToBHoM/Load.cs`, and
+  applied loads; the fix belongs in the scale constants in `Convert/Units.cs`, and
   the `UdlMagnitudeMatchesTheModel` test exists to settle it.
 - **Some loads are deliberately refused**, each with a counted warning saying why: trapezoidal loads
   (the API exposes one magnitude and one distance, which is not enough to reconstruct the shape),
@@ -307,8 +307,24 @@ For that reason the dependency closure is deployed in two parts:
   BHoM discards this assembly whole, and **the adapter silently does not appear in the UI's adapter
   list at all** - no error, just an absence.
 
-See the comment on the `CopyToBHoM` target in `TeklaStructuralDesigner_Adapter.csproj` for the full
-reasoning, and the version conflict table it documents.
+The seven shims, as resolved for API package 26.0.1:
+
+| Assembly | This toolkit | Shared folder |
+|---|---|---|
+| `Microsoft.Bcl.AsyncInterfaces` | 6.0.0.0 | 5.0.0.0 |
+| `Microsoft.Win32.Registry` | 4.0.0.0 | 5.0.0.0 |
+| `System.Buffers` | 4.0.2.0 | 4.0.3.0 |
+| `System.Runtime.CompilerServices.Unsafe` | 4.0.4.1 | 5.0.0.0 |
+| `System.Memory` | 4.0.1.1 | 4.0.1.1 |
+| `System.Numerics.Vectors` | 4.1.3.0 | 4.1.3.0 |
+| `System.Threading.Tasks.Extensions` | 4.2.0.1 | 4.2.0.1 |
+
+The last three match today, but which shims differ moves with every package update, so the private
+set is a fixed list of file names (`TsdKnownPrivate` in the csproj) rather than a version comparison.
+It is not worked out from what is already in the shared folder either, as deployment would then depend
+on which other toolkits happen to be installed. Any other dependency that turns out to share a file
+name with the shared folder is deployed privately as well, with a build warning asking for it to be
+added to the list.
 
 As resolved for API package 26.0.1, the private copies are *older* than the shared ones in three of
 the four cases - the reverse of how it was under 24.0.0, because the 26.x package lowered its
@@ -346,8 +362,8 @@ and rotated members are taken to follow the same rule as horizontal ones, which 
 `TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` swaps the major and minor results (`MY` with
 `MZ`, `FZ` with `FY`) after all this, as an escape hatch for a model that demonstrates otherwise; leave
 it `false`. Two other places may share the naming of moments and have not been checked: the `My`/`Mz`
-release flags in `Convert/ToBHoM/BarRelease.cs`, which only matter for an end released about one
-bending axis, and local member load directions in `Convert/ToBHoM/Load.cs`.
+release flags in `Convert/FromTsd/Properties/BarRelease.cs`, which only matter for an end released about one
+bending axis, and local member load directions in `Convert/FromTsd/Loads/Load.cs`.
 
 ### Member orientation
 A Bar's `OrientationAngle` comes from Tekla Structural Designer's `GlobalRotationAngle`, which is

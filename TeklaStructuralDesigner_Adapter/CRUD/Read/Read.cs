@@ -37,10 +37,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Adapter Methods                ****/
+        /**** Adapter Methods                           ****/
         /***************************************************/
 
-        // Called by the Pull method on the base adapter, once per requested Type.
+        // Called by the base Pull once per requested type.
         protected override IEnumerable<IBHoMObject> IRead(Type type, IList ids, ActionConfig actionConfig = null)
         {
             if (type == null)
@@ -74,8 +74,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             if (typeof(IResult).IsAssignableFrom(type))
             {
-                // Results are requested through a result request rather than by type, and are served by the
-                // ReadResults overloads. This is the standard BHoM message telling the caller to do that.
+                // Results are read through a result request.
                 Modules.Structure.ErrorMessages.ReadResultsError(type);
                 return new List<IBHoMObject>();
             }
@@ -86,15 +85,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (type == typeof(LoadCombination))
                 return ReadLoadCombinations(ids).Cast<IBHoMObject>();
 
-            // ICase asked for on its own means both kinds of case, which is what a caller filtering on
-            // the interface rather than on a concrete type is asking for.
+            // ICase means both kinds of case.
             if (type == typeof(ICase))
                 return ReadLoadcases(ids).Cast<IBHoMObject>().Concat(ReadLoadCombinations(ids).Cast<IBHoMObject>());
 
-            // Loads are matched on assignability rather than equality, so that ILoad returns every
-            // supported load and a concrete type returns just that one. The ids of a load request are
-            // not meaningful - a load has no identity of its own in Tekla Structural Designer - so they
-            // are not consulted here, unlike for Bars, Nodes and cases.
+            // Assignability, so ILoad returns every load. Loads have no identity of their own, so ids are ignored.
             if (typeof(ILoad).IsAssignableFrom(type))
             {
                 if (ids != null && ids.Count > 0)
@@ -108,13 +103,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Shared by every read that takes settings, so that a caller who passes the wrong kind of
-        // ActionConfig is told once, in the same words, wherever it happened. A plain ActionConfig is
-        // not the wrong kind: it is what the BHoM UIs pass when no configuration is given, so it means
-        // "defaults" and is taken silently.
+        // A plain ActionConfig, as the BHoM UIs pass by default, silently means defaults.
         private static TeklaStructuralDesignerPullConfig PullConfigOrDefault(ActionConfig actionConfig)
         {
             TeklaStructuralDesignerPullConfig config = actionConfig as TeklaStructuralDesignerPullConfig;
@@ -129,8 +121,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The ids of a request as a case insensitive set of trimmed strings, or null when the request
-        // names none - which every reader takes as "everything".
+        // The ids as a case insensitive set of trimmed strings, or null, meaning everything, if none.
         private static HashSet<string> RequestedIds(IList ids)
         {
             if (ids == null || ids.Count == 0)

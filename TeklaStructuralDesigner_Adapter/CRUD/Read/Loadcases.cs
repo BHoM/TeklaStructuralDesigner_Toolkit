@@ -34,23 +34,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
-        // The order the limit states of every combination are pulled in: all Strength first, then all
-        // Service, so a list of combinations reads in the same order as the case numbers.
+        // All Strength, then all Service, so combinations are listed in case number order.
         private static readonly TeklaStructuralDesignerLimitState[] m_LimitStates = { TeklaStructuralDesignerLimitState.Strength, TeklaStructuralDesignerLimitState.Service };
 
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Loadcases and combinations)   ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Note the difference from BuildLoadingCaseIdentities: that reduces every case to the Guid its
-        // results are read with, its Number and its Name, and results are filtered by the pull
-        // configuration's Include flags. This reads cases as objects in their own right, which those
-        // flags do not affect - asking to Pull a Loadcase is already an unambiguous request for every
-        // loadcase.
+        // Every loadcase as a Loadcase. Unlike results, not filtered by the pull configuration.
         private Dictionary<Guid, Loadcase> LoadcasesById(int timeoutSeconds)
         {
             return BHoMLoadcases(ReadTsdLoadcases(timeoutSeconds, null));
@@ -58,9 +52,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The BHoM Loadcase of each Tekla Structural Designer loadcase, keyed by its Guid, so that a
-        // loadcase pulled on its own, as the case of a load and as the case of a combination is built
-        // the same way.
+        // Keyed by Guid, so a loadcase is built the same way on its own, in a load or in a combination.
         private static Dictionary<Guid, Loadcase> BHoMLoadcases(List<ILoadcase> loadcases)
         {
             Dictionary<Guid, Loadcase> result = new Dictionary<Guid, Loadcase>();
@@ -69,7 +61,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (ILoadcase loadcase in loadcases)
             {
                 if (!result.ContainsKey(loadcase.Id))
-                    result[loadcase.Id] = loadcase.ToBHoM(Identifier(loadcase.Name, loadcase.UserName, loadcase.Index), numberById[loadcase.Id]);
+                    result[loadcase.Id] = loadcase.FromTsdLoadcase(Identifier(loadcase.Name, loadcase.UserName, loadcase.Index), numberById[loadcase.Id]);
             }
 
             return result;
@@ -77,49 +69,33 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The loadcases that are pulled: every one except Tekla Structural Designer's own slab and roof
-        // unit loadcases, which are not loading of the structure - see Convert.IsUnitLoadcase. Every
-        // read of loadcases goes through this, so that Loadcase, load and result pulls agree on which
-        // loadcases exist. Empty, with an error naming the consequence, if the read fails.
+        // Every loadcase except the unit loadcases (see Helpers.IsUnitLoadcase), so Loadcase, load and
+        // result pulls agree on which exist. Empty, with an error, if the read fails.
         private List<ILoadcase> ReadTsdLoadcases(int timeoutSeconds, string consequence)
         {
-            try
-            {
-                return Async.RunSync(ct => m_Model.GetLoadcasesAsync(null, ct), timeoutSeconds, "reading loadcases")
-                    .Where(l => !l.IsUnitLoadcase())
-                    .ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read loadcases from Tekla Structural Designer" + (consequence != null ? ", " + consequence : "") + ". " + e.Message);
+            IEnumerable<ILoadcase> loadcases;
+            if (!Async.TryRunSync(ct => m_Model.GetLoadcasesAsync(null, ct), timeoutSeconds, "reading loadcases", consequence ?? "no loadcases have been read", out loadcases, true))
                 return new List<ILoadcase>();
-            }
+
+            return loadcases.Where(l => !l.IsUnitLoadcase()).ToList();
         }
 
         /***************************************************/
 
-        // Every combination in the model; empty, with an error, if the read fails.
+        // Every combination; empty, with an error, if the read fails.
         private List<ICombination> ReadTsdCombinations(int timeoutSeconds)
         {
-            try
-            {
-                return Async.RunSync(ct => m_Model.GetCombinationsAsync(null, ct), timeoutSeconds, "reading load combinations").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read load combinations from Tekla Structural Designer. " + e.Message);
+            IEnumerable<ICombination> combinations;
+            if (!Async.TryRunSync(ct => m_Model.GetCombinationsAsync(null, ct), timeoutSeconds, "reading load combinations", "no load combinations have been read", out combinations, true))
                 return new List<ICombination>();
-            }
+
+            return combinations.ToList();
         }
 
         /***************************************************/
 
-        // The BHoM Number of each loadcase, keyed by its Guid. The number Tekla Structural Designer shows
-        // is kept wherever it can be; a loadcase whose number is 0 or less, or repeats one already taken,
-        // gets the next number above the highest in use instead, with a warning naming it, because a
-        // BHoM case number must be positive and unique - an analysis package refuses a case without one.
-        // Every read of loadcases goes through this, so the same loadcase has the same number whether it
-        // is pulled as a Loadcase, as the case of a load, or as the case of a result.
+        // The number shown in Tekla Structural Designer where it is positive and unique, as BHoM needs;
+        // otherwise the next free number, with a warning. Shared by every loadcase read.
         private static Dictionary<Guid, int> LoadcaseNumbers(List<ILoadcase> loadcases)
         {
             Dictionary<Guid, int> result = new Dictionary<Guid, int>();
@@ -162,14 +138,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
 
-            // The loadcases have to be read first regardless of whether the caller wanted them: a
-            // LoadCombination's LoadCases hold real Loadcase objects, not identifiers.
+            // A LoadCombination holds Loadcase objects, so these are read first.
             Dictionary<Guid, Loadcase> loadcaseById = LoadcasesById(timeout);
 
             List<ICombination> combinations = ReadTsdCombinations(timeout);
 
-            // Each combination becomes a Strength and a Service LoadCombination, for the limit states
-            // Tekla Structural Designer assesses it at.
+            // One LoadCombination per limit state the combination is assessed at.
             List<LoadCombination> result = new List<LoadCombination>();
             int totalUnresolved = 0;
             int noSlsId = 0;
@@ -183,7 +157,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         continue;
 
                     int unresolved;
-                    LoadCombination converted = combination.ToBHoM(limitState, loadcaseById, out unresolved);
+                    LoadCombination converted = combination.FromTsdLoadCombination(limitState, loadcaseById, out unresolved);
                     totalUnresolved += unresolved;
 
                     if (converted == null)
@@ -214,9 +188,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     "so no Service LoadCombination has been pulled for them. Re-analyse the model and pull again.");
             }
 
-            // Checked against a live model: Tekla Structural Designer's Strength results include the
-            // combination's notional horizontal loads, which are not a loadcase and so cannot be one of
-            // the LoadCombination's factored cases. The Service results match their factors exactly.
+            // Strength results include notional horizontal loads, which are not a loadcase.
             if (withNotionalLoads > 0)
             {
                 Engine.Base.Compute.RecordNote(withNotionalLoads + " Strength combination(s) include notional horizontal loads in Tekla Structural Designer. " +
@@ -229,10 +201,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Shared id filtering. BHoM passes ids through as objects, and this adapter's convention is
-        // that a case is addressed by the same identifier it carries as its Name and as a result's
-        // ResultCase - never by the Guid, which is meaningless to whoever is writing the request.
-        // A case can also be asked for by its Number, given as a number or as text.
+        // Cases are requested by Name or Number, never by Guid.
         private static List<T> Filter<T>(List<T> items, IList ids, Func<T, string> identifier, Func<T, int> number)
         {
             HashSet<string> requested = RequestedIds(ids);
@@ -244,7 +213,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Whether any notional horizontal load is switched on for the combination, in either direction.
+        // Whether notional horizontal loads are on in either direction.
         private static bool HasNotionalLoads(ICombination combination)
         {
             Tristate x = combination.NhlX.ValueOrDefault(Tristate.None);

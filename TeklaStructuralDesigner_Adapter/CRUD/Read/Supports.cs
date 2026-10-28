@@ -33,35 +33,21 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Supports)                     ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Every support in the model, keyed by the Guid of the construction point it sits on - the same
-        // Guid a Node is identified by - so that it can be attached to the Node at that point. The
-        // point's position is kept too, so that a support on a point no span ends at (under a wall, say)
-        // can still be pulled as a Node of its own.
-        //
-        // Nodes with the same fixity share one Constraint6DOF, as they would in any analysis package. A
-        // support with its own axis system gives its Node that Orientation, which is the frame BHoM reads
-        // the Node's Support in.
-        //
-        // report false leaves out the summary of what was skipped or approximated, for callers that only
-        // need to know which points are supported.
+        // Every support, keyed by its construction point Guid (as Nodes are), with its position for
+        // supports no span ends at. Identical fixities share one Constraint6DOF. report false skips the
+        // summary of what was skipped or approximated.
         private Dictionary<Guid, SupportedPoint> ReadSupports(int timeoutSeconds, bool report = true)
         {
             Dictionary<Guid, SupportedPoint> result = new Dictionary<Guid, SupportedPoint>();
 
-            List<ISupport> supports;
-            try
-            {
-                supports = Async.RunSync(ct => m_Model.GetSupportsAsync(null, ct), timeoutSeconds, "reading supports").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read supports from Tekla Structural Designer, so Nodes have been pulled without them. " + e.Message);
+            IEnumerable<ISupport> supportsRead;
+            if (!Async.TryRunSync(ct => m_Model.GetSupportsAsync(null, ct), timeoutSeconds, "reading supports", "Nodes have been pulled without them", out supportsRead))
                 return result;
-            }
+
+            List<ISupport> supports = supportsRead.ToList();
 
             if (supports.Count == 0)
                 return result;
@@ -83,8 +69,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
                 ISupportData data = support.Data.ValueOrDefault();
 
-                // Sub model supports are boundary conditions Tekla Structural Designer applies to a
-                // sub model it analyses on its own, not supports of the structure being pulled.
+                // Sub model supports are boundary conditions of a sub model, not of the structure.
                 SupportType type = data != null ? data.Type.ValueOrDefault(SupportType.Unknown) : SupportType.Unknown;
                 if (type == SupportType.SubModelTop || type == SupportType.SubModelBottom)
                 {
@@ -93,7 +78,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
 
                 bool isPartial;
-                Constraint6DOF constraint = data.ToBHoM(out isPartial);
+                Constraint6DOF constraint = data.FromTsdConstraint(out isPartial);
                 if (constraint == null)
                 {
                     unresolved++;
@@ -104,7 +89,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     partialFixity++;
 
                 bool axesReported;
-                Basis orientation = data.Ucs.ValueOrDefault().ToBHoMOrientation(out axesReported);
+                Basis orientation = data.Ucs.ValueOrDefault().FromTsdOrientation(out axesReported);
                 if (orientation != null)
                     oriented++;
                 else if (!axesReported && IsOriented(support, data))
@@ -157,24 +142,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             ISupportUcs ucs = data != null ? data.Ucs.ValueOrDefault() : null;
             return ucs != null && ucs.Definition.ValueOrDefault(SupportUcsDefinition.Unknown) == SupportUcsDefinition.UserDefined;
-        }
-
-        /***************************************************/
-        /****            Private Nested Types           ****/
-        /***************************************************/
-
-        private sealed class SupportedPoint
-        {
-            public Point Position { get; }
-            public Constraint6DOF Support { get; }
-            public Basis Orientation { get; }
-
-            public SupportedPoint(Point position, Constraint6DOF support, Basis orientation)
-            {
-                Position = position;
-                Support = support;
-                Orientation = orientation;
-            }
         }
 
         /***************************************************/

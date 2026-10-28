@@ -30,7 +30,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerPanelProperties : IFragment
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("The kind of Tekla Structural Designer element the Panel was pulled from: 'SlabItem', 'StructuralWall', 'Roof' or 'WindWall'.")]

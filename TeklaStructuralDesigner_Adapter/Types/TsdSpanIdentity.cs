@@ -26,14 +26,11 @@ using TSD.API.Remoting.Structure;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // Ties one TSD span to the identity it is given as a BHoM Bar. Holds a live IMemberSpan handle so
-    // the per-span-end fallback route (Types/TsdSpanIdentity -> IMemberSpan.GetEndForceAsync) can be
-    // used without looking the span back up. Kept internal to the Adapter: it is not serialisable and
-    // is never returned to a caller, only consumed while building results within a single Pull.
+    // One span with the identity its Bar is given, and the live span handle, for use within one Pull.
     internal sealed class TsdSpanIdentity
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         public string MemberName { get; }
@@ -49,24 +46,20 @@ namespace BH.Adapter.TeklaStructuralDesigner
         public string SectionName { get; }
         public string MemberConstruction { get; }
 
-        // Identity and position of the two construction points the span runs between, needed to build
-        // the Nodes a Bar requires. Guid.Empty / null if the span's end could not be resolved to a
-        // construction point - ReadBars skips a span in that state and reports the count once.
+        // The construction points at the span ends; Guid.Empty and null if unresolved.
         public Guid StartPointId { get; }
         public Guid EndPointId { get; }
         public Point StartPosition { get; }
         public Point EndPosition { get; }
 
-        // The identifier a BHoM Bar built from this span carries as its ObjectId: the member's own
-        // name plus the span's index within that member, so a single span member and a spliced,
-        // multi span member are both addressable and neither collides with the other's spans.
+        // The Bar's identifier: member name and span index, as "B12:0".
         public string ObjectId
         {
             get { return MemberName + ":" + SpanIndex; }
         }
 
         /***************************************************/
-        /****                Constructors               ****/
+        /**** Constructors                              ****/
         /***************************************************/
 
         public TsdSpanIdentity(

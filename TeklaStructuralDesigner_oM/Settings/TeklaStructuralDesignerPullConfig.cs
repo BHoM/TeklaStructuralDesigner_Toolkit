@@ -29,7 +29,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerPullConfig : ActionConfig
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("Which analysis to read results from. Tekla Structural Designer holds a separate set of results per analysis type, and a model may be solved for some and not others. Results are only returned for loading cases that have actually been solved for the type chosen here.")]

@@ -28,13 +28,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
-        // Push is overridden purely to fail clearly. The Tekla Structural Designer Remoting API is
-        // overwhelmingly read oriented, and no Create, Update or Delete path is implemented in this
-        // adapter. Without this override the base implementation would run its dependency and comparer
-        // machinery and report a successful push of zero objects, which reads as success.
+        // Overridden to fail clearly: without it the base Push reports a successful push of nothing.
         public override List<object> Push(IEnumerable<object> objects, string tag = "", PushType pushType = PushType.AdapterDefault, ActionConfig actionConfig = null)
         {
             Engine.Base.Compute.RecordError("Pushing to Tekla Structural Designer is not supported. This adapter reads analysis results only. Nothing was sent to Tekla Structural Designer.");

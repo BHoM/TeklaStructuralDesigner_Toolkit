@@ -36,7 +36,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         public IEnumerable<IResult> ReadResults(BarResultRequest request, ActionConfig actionConfig = null)
@@ -125,16 +125,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Auto force source)            ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Runs the fast batched solver route, then spends one extra call cross-checking a single
-        // span/case pair against the proven per span end route. This is what neutralises the two
-        // things that could not be verified without a live Tekla Structural Designer instance: whether
-        // the batched route's station positions line up with span-relative positions the way assumed,
-        // and whether its element ordering is genuinely along-span. A silent disagreement here would
-        // otherwise mean silently wrong forces, not a visible failure.
+        // The batched solver route, spot checked against one span end force from the per span end
+        // route; if they disagree, the per span end route is used for the whole pull.
         private List<BarForce> BarForcesAuto(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, bool endsOnly, int timeoutSeconds)
         {
             List<BarForce> solverResults = BarForcesFromSolver(spans, cases, config, endsOnly, timeoutSeconds);
@@ -153,9 +148,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         private bool SolverResultsAreTrustworthy(List<BarForce> solverResults, List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, int timeoutSeconds)
         {
-            // An empty result is not evidence of a units or axis problem - it usually means the
-            // requested case has not been solved, which BarForcesFromSolver has already reported on.
-            // Falling back to the slow route in that situation would cost a great deal for no benefit.
+            // No results usually means an unsolved case, already reported; the slow route would not help.
             if (solverResults.Count == 0)
                 return true;
 
@@ -167,10 +160,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             BarForce solverStart = solverResults.FirstOrDefault(r =>
                 Equals(r.ObjectId, checkSpan.ObjectId) && Equals(r.ResultCase, checkCase.Number) && Math.Abs(r.Position) < 1e-6);
             if (solverStart == null)
-                return true;        // Nothing to compare for this particular pair; do not fail the whole read over it.
+                return true;
 
             string failure;
-            IForce3DLocal spanEndForce = ReadSpanEndForce(checkSpan, 0, checkCase, config.AnalysisType.ToTeklaStructuralDesigner(), config.LoadingResultType.ToTeklaStructuralDesigner(), timeoutSeconds, out failure);
+            IForce3DLocal spanEndForce = ReadSpanEndForce(checkSpan, 0, checkCase, config.AnalysisType.ToTsd(), config.LoadingResultType.ToTsd(), timeoutSeconds, out failure);
 
             if (failure != null)
             {
@@ -181,9 +174,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (spanEndForce == null)
                 return true;
 
-            BarForce reference = spanEndForce.ToBHoM(checkSpan.ObjectId, checkCase.Number, 0.0, 2, true, checkSpan.IsVertical(), config.SwapMajorMinorAxes);
+            BarForce reference = spanEndForce.FromTsdBarForce(checkSpan.ObjectId, checkCase.Number, 0.0, 2, true, checkSpan.IsVertical(), config.SwapMajorMinorAxes);
 
-            const double tolerance = 1.0; // 1 N / 1 N.m: a sanity check on route agreement, not a precision comparison.
+            const double tolerance = 1.0;       // N, N.m: a sanity check, not a precision comparison.
             return Close(solverStart.FX, reference.FX, tolerance) && Close(solverStart.FY, reference.FY, tolerance) &&
                    Close(solverStart.FZ, reference.FZ, tolerance) && Close(solverStart.MX, reference.MX, tolerance) &&
                    Close(solverStart.MY, reference.MY, tolerance) && Close(solverStart.MZ, reference.MZ, tolerance);

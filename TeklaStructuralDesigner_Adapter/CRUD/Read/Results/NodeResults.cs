@@ -4,33 +4,33 @@
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
- *
- *
- * The BHoM is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3.0 of the License, or
- * (at your option) any later version.
- *
- * The BHoM is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.
+ *                                           
+ *                                                                              
+ * The BHoM is free software: you can redistribute it and/or modify         
+ * it under the terms of the GNU Lesser General Public License as published by  
+ * the Free Software Foundation, either version 3.0 of the License, or          
+ * (at your option) any later version.                                          
+ *                                                                              
+ * The BHoM is distributed in the hope that it will be useful,              
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of               
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                 
+ * GNU Lesser General Public License for more details.                          
+ *                                                                            
+ * You should have received a copy of the GNU Lesser General Public License     
+ * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BH.Engine.Data;
+using BH.Engine.Geometry;
 using BH.oM.Adapter;
 using BH.oM.Adapters.TeklaStructuralDesigner;
+using BH.oM.Data.Collections;
 using BH.oM.Structure.Requests;
 using TSD.API.Remoting.Loading;
 using TSD.API.Remoting.Solver;
-
-// Aliased rather than imported by namespace: the Tekla Structural Designer solver namespace this file
-// also needs declares node and result types of its own.
 using IResult = BH.oM.Analytical.Results.IResult;
 using Node = BH.oM.Structure.Elements.Node;
 using Point = BH.oM.Geometry.Point;
@@ -40,17 +40,19 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
-        // Node reactions and node displacements, read from the solver model in one call per loading
-        // case - the same route, cases and pull configuration as the batched bar forces.
-        //
-        // Results are reported against the Nodes this adapter pulls, with the Node's id as their
-        // ObjectId. The solver knows nothing of construction points - a solver node has an index and
-        // coordinates only - so a Node is matched to the solver node at its position. Solver nodes that
-        // no pulled Node sits on, such as those along a span or in the mesh of a slab or wall, have no
-        // Node to be reported against and are left out.
+        // Distance (m) within which a solver node is at a Node's position, as SupportMatchDecimals.
+        private const double SolverNodeTolerance = 1e-3;
+
+        /***************************************************/
+        /**** Public Methods                            ****/
+        /***************************************************/
+
+        // Reactions and displacements, read from the solver model once per case. The solver has no
+        // construction points, so each pulled Node is matched to the solver node at its position, and
+        // solver nodes no pulled Node sits on are left out.
         public IEnumerable<IResult> ReadResults(NodeResultRequest request, ActionConfig actionConfig = null)
         {
             List<IResult> results = new List<IResult>();
@@ -107,21 +109,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (cases.Count == 0)
                 return results;                    // FilterCases has already recorded why.
 
-            TSD.API.Remoting.Solver.IModel solverModel = SolverModel(config, timeoutSeconds);
+            IModel solverModel = SolverModel(config, timeoutSeconds);
             if (solverModel == null)
                 return results;
 
-            List<INode> solverNodes;
-            try
-            {
-                solverNodes = Async.RunSync(ct => solverModel.GetNodesAsync(null, ct), timeoutSeconds, "reading solver nodes").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read solver nodes from Tekla Structural Designer. " + e.Message);
+            IEnumerable<INode> solverNodesRead;
+            if (!Async.TryRunSync(ct => solverModel.GetNodesAsync(null, ct), timeoutSeconds, "reading solver nodes", "no node results have been read", out solverNodesRead, true))
                 return results;
-            }
 
+            List<INode> solverNodes = solverNodesRead.ToList();
             List<NodeTarget> targets = reactions ? ReactionTargets(nodes, solverNodes, everyNode) : DisplacementTargets(nodes, solverNodes);
             if (targets.Count == 0)
             {
@@ -138,49 +134,46 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (solvedCases.Count == 0)
                 return results;
 
-            LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
+            LoadingResultType loadingResultType = config.LoadingResultType.ToTsd();
             List<int> solverNodeIndices = targets.SelectMany(t => t.SolverNodeIndices).Distinct().ToList();
 
             foreach (TsdLoadingCaseIdentity loadingCase in solvedCases)
             {
-                try
+                if (reactions)
                 {
-                    if (reactions)
-                    {
-                        Dictionary<int, IForce3DGlobal> forceByNode = Async.RunSync(
-                            ct => analysis3D.GetNodalReactionsAsync(loadingCase.Id, loadingResultType, solverNodeIndices, ct),
-                            timeoutSeconds, "reading reactions for case '" + loadingCase + "'")
-                            .Where(f => f.Force != null)
-                            .GroupBy(f => f.NodeIndex)
-                            .ToDictionary(g => g.Key, g => g.First().Force);
+                    if (!Async.TryRunSync(ct => analysis3D.GetNodalReactionsAsync(loadingCase.Id, loadingResultType, solverNodeIndices, ct),
+                        timeoutSeconds, "reading reactions for case '" + loadingCase + "'", "it has been skipped", out var reactionsRead))
+                        continue;
 
-                        foreach (NodeTarget target in targets)
-                        {
-                            List<IForce3DGlobal> forces = target.SolverNodeIndices.Where(forceByNode.ContainsKey).Select(i => forceByNode[i]).ToList();
-                            if (forces.Count > 0)
-                                results.Add(forces.ToBHoM(target.ObjectId, loadingCase.Number));
-                        }
-                    }
-                    else
-                    {
-                        Dictionary<int, IDisplacement> displacementByNode = Async.RunSync(
-                            ct => analysis3D.GetNodalDisplacementsAsync(loadingCase.Id, loadingResultType, solverNodeIndices, ct),
-                            timeoutSeconds, "reading displacements for case '" + loadingCase + "'")
-                            .Where(d => d.Displacement != null)
-                            .GroupBy(d => d.NodeIndex)
-                            .ToDictionary(g => g.Key, g => g.First().Displacement);
+                    Dictionary<int, IForce3DGlobal> forceByNode = reactionsRead
+                        .Where(f => f.Force != null)
+                        .GroupBy(f => f.NodeIndex)
+                        .ToDictionary(g => g.Key, g => g.First().Force);
 
-                        foreach (NodeTarget target in targets)
-                        {
-                            IDisplacement displacement;
-                            if (displacementByNode.TryGetValue(target.SolverNodeIndices[0], out displacement))
-                                results.Add(displacement.ToBHoM(target.ObjectId, loadingCase.Number));
-                        }
+                    foreach (NodeTarget target in targets)
+                    {
+                        List<IForce3DGlobal> forces = target.SolverNodeIndices.Where(forceByNode.ContainsKey).Select(i => forceByNode[i]).ToList();
+                        if (forces.Count > 0)
+                            results.Add(forces.FromTsdNodeReaction(target.ObjectId, loadingCase.Number));
                     }
                 }
-                catch (Exception e)
+                else
                 {
-                    Engine.Base.Compute.RecordWarning("Failed to read node results for case '" + loadingCase + "'; it has been skipped. " + e.Message);
+                    if (!Async.TryRunSync(ct => analysis3D.GetNodalDisplacementsAsync(loadingCase.Id, loadingResultType, solverNodeIndices, ct),
+                        timeoutSeconds, "reading displacements for case '" + loadingCase + "'", "it has been skipped", out var displacementsRead))
+                        continue;
+
+                    Dictionary<int, IDisplacement> displacementByNode = displacementsRead
+                        .Where(d => d.Displacement != null)
+                        .GroupBy(d => d.NodeIndex)
+                        .ToDictionary(g => g.Key, g => g.First().Displacement);
+
+                    foreach (NodeTarget target in targets)
+                    {
+                        IDisplacement displacement;
+                        if (displacementByNode.TryGetValue(target.SolverNodeIndices[0], out displacement))
+                            results.Add(displacement.FromTsdNodeDisplacement(target.ObjectId, loadingCase.Number));
+                    }
                 }
             }
 
@@ -194,20 +187,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Node result targets)          ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Which solver nodes each Node's reaction is read from: every supporting solver node at its
-        // position.
-        //
-        // Tekla Structural Designer models coincident construction points freely, and this adapter
-        // attaches a support to every Node at its position (see ApplySupports), so several pulled Nodes
-        // can sit on one support. Its reaction is reported once, against the first of them: reported
-        // against each, the reactions would no longer sum to the load on the structure.
+        // Every supporting solver node at each Node's position. Coincident Nodes all carry the support
+        // (see ApplySupports), so its reaction is reported once, against the first, to keep the sum right.
         private static List<NodeTarget> ReactionTargets(List<KeyValuePair<Guid, Node>> nodes, List<INode> solverNodes, bool everyNode)
         {
-            SolverNodeLookup lookup = new SolverNodeLookup(solverNodes.Where(IsSupport));
+            List<INode> supports = solverNodes.Where(IsSupport).ToList();
+            PointMatrix<int> matrix = SolverNodeMatrix(supports);
 
             List<NodeTarget> targets = new List<NodeTarget>();
             HashSet<int> claimed = new HashSet<int>();
@@ -215,20 +203,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             foreach (KeyValuePair<Guid, Node> node in nodes)
             {
-                List<int> atPosition = lookup.At(node.Value.Position);
+                List<int> atPosition = SolverNodesAt(matrix, node.Value.Position);
                 if (atPosition.Count == 0)
                 {
                     unsupported++;
                     continue;
                 }
 
-                List<int> unclaimed = new List<int>();
-                foreach (int index in atPosition)
-                {
-                    if (claimed.Add(index))
-                        unclaimed.Add(index);
-                }
-
+                List<int> unclaimed = atPosition.Where(claimed.Add).ToList();
                 if (unclaimed.Count == 0)
                     shared++;
                 else
@@ -241,14 +223,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     "A reaction is reported once per position, so that the reactions pulled sum correctly.");
             }
 
-            // Asked for by name, a Node that is not a support is worth a warning. With every Node read,
-            // it is simply most of the model.
+            // Only worth a warning for Nodes asked for by name.
             if (!everyNode && unsupported > 0)
                 Engine.Base.Compute.RecordWarning(unsupported + " requested Node(s) are not at a support of the solver model, so have no reaction.");
 
-            if (everyNode && lookup.Count > claimed.Count)
+            if (everyNode && supports.Count > claimed.Count)
             {
-                Engine.Base.Compute.RecordWarning((lookup.Count - claimed.Count) + " supported solver node(s) do not coincide with a pulled Node - along the base of a wall, for example - " +
+                Engine.Base.Compute.RecordWarning((supports.Count - claimed.Count) + " supported solver node(s) do not coincide with a pulled Node - along the base of a wall, for example - " +
                     "so their reactions have not been read. The reactions pulled do not sum to the total reaction on the structure.");
             }
 
@@ -257,11 +238,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Whether the solver reports a reaction at a node: it carries a support of the structure, or is
-        // one the solver supports implicitly, such as the mesh nodes along the base of a wall.
-        // IsSupporting alone is not enough. Checked on a live model, it was true only for the 8 wall
-        // base nodes and false for all 35 column bases carrying a support, while the solver returned
-        // reactions at all 43.
+        // IsSupporting alone misses supported column bases, so explicit supports are checked too.
         private static bool IsSupport(INode node)
         {
             return node.IsSupporting || node.HasSupport(SupportType.Structure3D);
@@ -269,17 +246,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Which solver node each Node's displacement is read from: the one nearest its position.
+        // The solver node nearest each Node's position.
         private static List<NodeTarget> DisplacementTargets(List<KeyValuePair<Guid, Node>> nodes, List<INode> solverNodes)
         {
-            SolverNodeLookup lookup = new SolverNodeLookup(solverNodes);
+            PointMatrix<int> matrix = SolverNodeMatrix(solverNodes);
 
             List<NodeTarget> targets = new List<NodeTarget>();
             int unmatched = 0;
 
             foreach (KeyValuePair<Guid, Node> node in nodes)
             {
-                List<int> atPosition = lookup.At(node.Value.Position);
+                List<int> atPosition = SolverNodesAt(matrix, node.Value.Position);
                 if (atPosition.Count == 0)
                     unmatched++;
                 else
@@ -293,90 +270,26 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Nested Types           ****/
-        /***************************************************/
 
-        // A Node results are reported against, and the solver nodes they are read from.
-        private sealed class NodeTarget
+        private static PointMatrix<int> SolverNodeMatrix(IEnumerable<INode> solverNodes)
         {
-            public string ObjectId { get; }
-            public List<int> SolverNodeIndices { get; }
-
-            public NodeTarget(string objectId, List<int> solverNodeIndices)
-            {
-                ObjectId = objectId;
-                SolverNodeIndices = solverNodeIndices;
-            }
+            List<LocalData<int>> data = solverNodes.Select(n => Engine.Data.Create.LocalData(n.Coordinates.FromTsdPoint(), n.Index)).ToList();
+            return Engine.Data.Create.PointMatrix(data, SolverNodeTolerance);
         }
 
         /***************************************************/
 
-        // Solver nodes by position, in metres. A grid of cells one tolerance wide, searched together
-        // with its neighbours, rather than a dictionary keyed on rounded coordinates: a coordinate that
-        // falls on a rounding boundary rounds either way depending on floating point noise, and the
-        // match would then be missed.
-        private sealed class SolverNodeLookup
+        // The solver node indices within tolerance of a position, nearest first.
+        private static List<int> SolverNodesAt(PointMatrix<int> matrix, Point position)
         {
-            // The same millimetre a support is matched to a Node at - see SupportMatchDecimals.
-            private const double Tolerance = 1e-3;
+            if (position == null)
+                return new List<int>();
 
-            private readonly Dictionary<Tuple<long, long, long>, List<KeyValuePair<Point, int>>> m_Cells = new Dictionary<Tuple<long, long, long>, List<KeyValuePair<Point, int>>>();
-
-            public int Count { get; private set; }
-
-            public SolverNodeLookup(IEnumerable<INode> nodes)
-            {
-                foreach (INode node in nodes)
-                {
-                    Point position = node.Coordinates.ToBHoMPoint();
-                    Tuple<long, long, long> cell = Tuple.Create(Cell(position.X), Cell(position.Y), Cell(position.Z));
-
-                    List<KeyValuePair<Point, int>> inCell;
-                    if (!m_Cells.TryGetValue(cell, out inCell))
-                        m_Cells[cell] = inCell = new List<KeyValuePair<Point, int>>();
-
-                    inCell.Add(new KeyValuePair<Point, int>(position, node.Index));
-                    Count++;
-                }
-            }
-
-            // The indices of the solver nodes within tolerance of a position, nearest first.
-            public List<int> At(Point position)
-            {
-                List<KeyValuePair<double, int>> found = new List<KeyValuePair<double, int>>();
-                if (position == null)
-                    return new List<int>();
-
-                long x = Cell(position.X), y = Cell(position.Y), z = Cell(position.Z);
-
-                for (long i = x - 1; i <= x + 1; i++)
-                {
-                    for (long j = y - 1; j <= y + 1; j++)
-                    {
-                        for (long k = z - 1; k <= z + 1; k++)
-                        {
-                            List<KeyValuePair<Point, int>> inCell;
-                            if (!m_Cells.TryGetValue(Tuple.Create(i, j, k), out inCell))
-                                continue;
-
-                            foreach (KeyValuePair<Point, int> candidate in inCell)
-                            {
-                                double dx = candidate.Key.X - position.X, dy = candidate.Key.Y - position.Y, dz = candidate.Key.Z - position.Z;
-                                double distance = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                                if (distance <= Tolerance)
-                                    found.Add(new KeyValuePair<double, int>(distance, candidate.Value));
-                            }
-                        }
-                    }
-                }
-
-                return found.OrderBy(f => f.Key).ThenBy(f => f.Value).Select(f => f.Value).ToList();
-            }
-
-            private static long Cell(double coordinate)
-            {
-                return (long)Math.Floor(coordinate / Tolerance);
-            }
+            return matrix.CloseToPoint(position, SolverNodeTolerance)
+                .OrderBy(d => d.Position.Distance(position))
+                .ThenBy(d => d.Data)
+                .Select(d => d.Data)
+                .ToList();
         }
 
         /***************************************************/

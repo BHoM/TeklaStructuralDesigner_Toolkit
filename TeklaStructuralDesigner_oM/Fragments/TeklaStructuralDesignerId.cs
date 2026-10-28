@@ -29,7 +29,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerId : IAdapterId, IPersistentAdapterId
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("The identifier of the object in Tekla Structural Designer, as used to request it and its results. For a Bar this is a string of the form 'MemberName:SpanIndex', matching the member name shown in the Tekla Structural Designer interface. For a Loadcase or LoadCombination it is the case identifier, the same as its Name. For a Node it is the Guid of its construction point, which has no readable name.")]

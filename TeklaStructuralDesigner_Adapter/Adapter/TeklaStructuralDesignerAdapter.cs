@@ -29,14 +29,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter : BHoMAdapter
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("Settings controlling how this adapter talks to Tekla Structural Designer.")]
         public virtual TeklaStructuralDesignerConfig TeklaStructuralDesignerConfig { get; set; } = new TeklaStructuralDesignerConfig();
 
         /***************************************************/
-        /****                Constructors               ****/
+        /**** Constructors                              ****/
         /***************************************************/
 
         [Description("Creates an adapter for reading analysis results from Tekla Structural Designer. Tekla Structural Designer must already be running with the model open - its Remoting API attaches to a live instance and has no means of opening a file itself.")]
@@ -46,8 +46,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         [Output("adapter", "Adapter for reading analysis results from Tekla Structural Designer.")]
         public TeklaStructuralDesignerAdapter(string modelPath = "", TeklaStructuralDesignerConfig teklaStructuralDesignerConfig = null, bool active = false)
         {
-            // Must be the first statement: registers the resolver for the privately deployed Tekla
-            // Structural Designer dependencies before any of their metadata could be touched.
+            // Must be first, before any Tekla Structural Designer type is touched.
             AssemblyResolver.EnsureRegistered();
 
             AdapterIdFragmentType = typeof(TeklaStructuralDesignerId);

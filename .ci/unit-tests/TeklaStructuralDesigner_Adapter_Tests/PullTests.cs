@@ -33,12 +33,8 @@ using Shouldly;
 
 namespace BH.Tests.Adapter.TeklaStructuralDesigner
 {
-    // Every test in this fixture is [Explicit]: they need Tekla Structural Designer actually running,
-    // with a model open and analysed, which no CI agent has - the Remoting API attaches to a live
-    // instance and has no headless mode. Unlike Robot_Toolkit's equivalent fixture, there is no
-    // committed test model here yet either: see ../Models/README.md for what is needed before these
-    // can be un-explicited and pointed at a real file.
-    //
+    // Explicit: these need Tekla Structural Designer running with an analysed model open, which CI
+    // does not have. See ../Models/README.md for the test model they need.
     // Run explicitly with: dotnet test --filter "FullyQualifiedName~PullTests"
     [Explicit("Requires Tekla Structural Designer running with an analysed model open - see Models/README.md")]
     public class PullTests
@@ -65,7 +61,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /**** Public Tests                              ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Test]
@@ -134,7 +130,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
-        [Description("Gravity load on a horizontal beam must come back as major axis shear (FZ), not minor (FY). Guards the axis mapping in Convert/ToBHoM/BarForce.cs: if it fails with FY carrying the shear, the major and minor axes have been transposed.")]
+        [Description("Gravity load on a horizontal beam must come back as major axis shear (FZ), not minor (FY). Guards the axis mapping in Convert/FromTsd/Results/BarForce.cs: if it fails with FY carrying the shear, the major and minor axes have been transposed.")]
         public void GravityBendingIsMajorAxis()
         {
             // Same placeholder member and combination as SimplySupportedBeamShearAndMomentAreSymmetric.
@@ -370,7 +366,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
-        [Description("A known UDL must come back at the magnitude the model applies, in BHoM's N/m. This is the test that settles whether Tekla Structural Designer reports applied loads in the same N/mm system as its results - see Convert/ToBHoM/Load.cs.")]
+        [Description("A known UDL must come back at the magnitude the model applies, in BHoM's N/m. This is the test that settles whether Tekla Structural Designer reports applied loads in the same N/mm system as its results - see Convert/Units.cs.")]
         public void UdlMagnitudeMatchesTheModel()
         {
             // Update these two to a UDL that exists in the test model, and the magnitude it is applied

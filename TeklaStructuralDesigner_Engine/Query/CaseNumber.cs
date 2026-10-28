@@ -29,22 +29,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Private Fields                 ****/
-        /***************************************************/
-
-        // The case numbering convention. Loadcases keep the number Tekla Structural Designer shows
-        // for them. Each combination is pulled once per limit state, and the limit state is encoded in
-        // the thousands: Strength is 1000 + the combination's number, Service 2000 + it. So Tekla
-        // Structural Designer combination 48 is LoadCombination 1048 (Strength) and 2048 (Service), a
-        // number reads back to both the combination and the limit state, and no loadcase, Strength
-        // combination or Service combination can share a number as long as every Tekla Structural
-        // Designer number is below 1000.
-        private const int NumberBand = 1000;
-        private const int StrengthBand = 1;
-        private const int ServiceBand = 2;
-
-        /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The BHoM case number of one limit state of a Tekla Structural Designer combination: 1000 + the combination number for Strength, 2000 + it for Service. Loadcases keep their own Tekla Structural Designer number, so the three never collide. Returns -1, with an error, for a combination number outside 0-999, which the convention has no room for.")]
@@ -60,7 +45,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
                 return -1;
             }
 
-            return (limitState == TeklaStructuralDesignerLimitState.Service ? ServiceBand : StrengthBand) * NumberBand + combinationNumber;
+            return Band(limitState) * NumberBand + combinationNumber;
         }
 
         /***************************************************/

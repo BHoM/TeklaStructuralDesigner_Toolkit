@@ -34,17 +34,12 @@ using TSD.API.Remoting.Structure;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // Converts the materials, sections and releases of the spans read in one Pull, once each. A model has
-    // thousands of spans but only a handful of distinct sections, and building a section from a profile
-    // integrates the profile's geometry, so converting per span would be both slow and would hand back
-    // thousands of copies of the same section instead of one shared object per section.
-    //
-    // It also records how each section was obtained, so that the pull can report it once, in summary,
-    // rather than once per span.
+    // Converts each distinct material, section and release in a pull once, so Bars share them and
+    // section integration is not repeated per span, and summarises how each was obtained.
     internal sealed class BarPropertyCache
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
         private readonly Dictionary<Guid, IMaterialFragment> m_Materials = new Dictionary<Guid, IMaterialFragment>();
@@ -64,11 +59,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
         private readonly Dictionary<string, HashSet<string>> m_Explicit = new Dictionary<string, HashSet<string>>();
 
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
-        // The BHoM library material of the same grade if there is one that agrees with the model, and
-        // the material built from the model's own values if not.
+        // The matching BHoM library material if there is one, otherwise the model's own.
         public IMaterialFragment Material(IMaterial material)
         {
             if (material == null)
@@ -78,7 +72,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (m_Materials.TryGetValue(material.Id, out result))
                 return result;
 
-            IMaterialFragment fromModel = material.ToBHoM();
+            IMaterialFragment fromModel = material.FromTsdMaterial();
 
             string rejectedReason;
             result = fromModel.MatchLibraryMaterial(out rejectedReason);
@@ -107,7 +101,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return null;
 
             int approximated;
-            BarRelease release = span.StartReleases.ValueOrDefault().ToBHoM(span.EndReleases.ValueOrDefault(), out approximated);
+            BarRelease release = span.StartReleases.ValueOrDefault().FromTsdBarRelease(span.EndReleases.ValueOrDefault(), out approximated);
             m_ApproximatedReleaseEnds += approximated;
 
             BarRelease shared;
@@ -120,10 +114,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // In order of preference: a match in the BHoM steel section library, a section built from the
-        // BHoM profile matching the section's shape, and the section constants Tekla Structural Designer
-        // reports. Structure.Create.SectionPropertyFromProfile picks SteelSection, ConcreteSection and so
-        // on from the material, which is why the material must already be converted.
+        // In order of preference: the BHoM steel section library, a section built from the matching
+        // profile, and the reported section constants. The material picks the section type.
         public ISectionProperty Section(ISection section, IMaterialFragment material)
         {
             if (section == null)
@@ -157,7 +149,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             string unsupportedReason;
-            IProfile profile = section.ToBHoMProfile(out unsupportedReason);
+            IProfile profile = section.FromTsdProfile(out unsupportedReason);
             if (profile != null)
                 result = Engine.Structure.Create.SectionPropertyFromProfile(profile, material, name);
 
@@ -171,7 +163,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
             else
             {
-                result = section.ToBHoMExplicit(material);
+                result = section.FromTsdExplicitSection(material);
                 Add(m_Explicit, unsupportedReason ?? "the BHoM profile could not be created from its dimensions", name);
             }
 
@@ -232,12 +224,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Name alone is not a safe key: parametric sections can share a name across sizes, and the same
-        // catalogue section can be used in two grades. The reported constants tell sizes apart, and the
-        // material tells grades apart.
+        // Name alone is not unique across parametric sizes or grades, so constants and material are added.
         private static string Key(ISection section, IMaterialFragment material)
         {
             return string.Join("|",
@@ -267,10 +257,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         private static string List(IEnumerable<string> names)
         {
-            const int shown = 10;
-            List<string> all = names.Select(n => string.IsNullOrWhiteSpace(n) ? "<unnamed>" : n).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-            string list = string.Join(", ", all.Take(shown));
-            return all.Count > shown ? list + " and " + (all.Count - shown) + " more" : list;
+            return Helpers.Summary(names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
         }
 
         /***************************************************/

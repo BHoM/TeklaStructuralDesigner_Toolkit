@@ -32,21 +32,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
-        // Decimal places a Node's position is rounded to when a support is matched to it by position -
-        // millimetre precision, the same as the BHoM structural adapters merge coincident nodes at.
+        // Millimetre precision, as the BHoM structural adapters merge coincident nodes at.
         private const int SupportMatchDecimals = 3;
 
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Distinct Nodes at the start and end of every span in the model, plus a Node at every supported
-        // point that no span ends at. Supports are attached to the Node the member actually ends at, so
-        // a Node pulled on its own and the same Node reached through a Bar's Start/End are one object
-        // carrying one support.
+        // A Node at each span end and at each supported point no span ends at. Ids match the point Guid.
         private List<Node> ReadNodes(IList ids)
         {
             Dictionary<Guid, Node> nodeById = NodesById(TeklaStructuralDesignerConfig.TimeoutSeconds, true);
@@ -60,9 +56,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Every Node this adapter pulls, keyed by the Guid of its construction point. Node results are
-        // read against the same set, with reportSupports false so that a result pull does not repeat
-        // what pulling the Nodes says about their supports.
+        // Every Node, keyed by construction point Guid. reportSupports false keeps result pulls quiet.
         private Dictionary<Guid, Node> NodesById(int timeout, bool reportSupports)
         {
             List<TsdSpanIdentity> spans = BuildSpanIdentities(timeout);
@@ -71,14 +65,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
             HashSet<Guid> attached = ApplySupports(nodeById, supports);
 
-            // Whatever is left holds up something this adapter does not read - a wall, a slab - so it
-            // becomes a Node of its own rather than being dropped.
+            // Supports under walls or slabs become Nodes of their own.
             foreach (KeyValuePair<Guid, SupportedPoint> supported in supports)
             {
                 if (attached.Contains(supported.Key) || nodeById.ContainsKey(supported.Key))
                     continue;
 
-                nodeById[supported.Key] = Convert.ToBHoM(supported.Key, supported.Value.Position, supported.Value.Support, supported.Value.Orientation);
+                nodeById[supported.Key] = Convert.FromTsdNode(supported.Key, supported.Value.Position, supported.Value.Support, supported.Value.Orientation);
             }
 
             return nodeById;
@@ -93,10 +86,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (TsdSpanIdentity span in spans)
             {
                 if (span.StartPointId != Guid.Empty && !nodeById.ContainsKey(span.StartPointId))
-                    nodeById[span.StartPointId] = Convert.ToBHoM(span.StartPointId, span.StartPosition);
+                    nodeById[span.StartPointId] = Convert.FromTsdNode(span.StartPointId, span.StartPosition);
 
                 if (span.EndPointId != Guid.Empty && !nodeById.ContainsKey(span.EndPointId))
-                    nodeById[span.EndPointId] = Convert.ToBHoM(span.EndPointId, span.EndPosition);
+                    nodeById[span.EndPointId] = Convert.FromTsdNode(span.EndPointId, span.EndPosition);
             }
 
             return nodeById;
@@ -104,20 +97,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Attaches each support to its Node, and reports which supports found one.
-        //
-        // Matching on the construction point alone is not enough: Tekla Structural Designer does not
-        // always put a support and the member end it holds up on the same point. On the model this was
-        // written against, half the supports sat on a point of their own, coincident with the point the
-        // member ended at - the raker bases and some perimeter columns among them. Keyed only by point,
-        // those supports would land on a Node of their own while the Bar's end Node stayed free, and the
-        // support would then disappear as soon as the model reached a package that merges coincident
-        // nodes, as Robot does.
-        //
-        // So a support is attached to every Node at its position, found through BHoM's own
-        // NodeDistanceComparer, as well as to the one carrying its construction point. Tekla Structural
-        // Designer models coincident construction points freely - 124 positions carry more than one on
-        // that same model - and a support has to survive whichever of them a downstream package keeps.
+        // Attaches each support to every Node at its position (BHoM NodeDistanceComparer), not only the
+        // one on its construction point: supports often sit on a coincident point of their own, and must
+        // survive whichever point a package that merges coincident nodes keeps. Returns those attached.
         private static HashSet<Guid> ApplySupports(Dictionary<Guid, Node> nodeById, Dictionary<Guid, SupportedPoint> supports)
         {
             HashSet<Guid> attached = new HashSet<Guid>();

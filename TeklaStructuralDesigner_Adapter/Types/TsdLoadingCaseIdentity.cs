@@ -25,35 +25,27 @@ using BH.oM.Adapters.TeklaStructuralDesigner;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // A loading case - a loadcase, or one limit state of a combination - reduced to what a bar force
-    // read needs: the Guid TSD requires to ask for its results, and the Number and Name the matching
-    // BHoM Loadcase or LoadCombination carries. See Engine Query.CaseNumber for the numbering.
+    // A loadcase, or one limit state of a combination, reduced to what a results read needs.
     internal sealed class TsdLoadingCaseIdentity
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
-        // The loadingId argument every TSD results call needs. For a Strength combination this is the
-        // combination's own Guid; for a Service combination it is the combination's SlsId - the hidden
-        // SLS combination Tekla Structural Designer solves the service factors in. Checked against a
-        // live model: results read with the SlsId equal the loadcase results recombined with the
-        // service factors exactly. Kept internally and never surfaced as ResultCase.
+        // The Guid results are read with: a Strength combination's own Id, a Service combination's
+        // SlsId (verified to give the loadcase results recombined with the service factors).
         public Guid Id { get; }
 
-        // The Number of the matching BHoM Loadcase or LoadCombination, and what ResultCase is set to.
-        // Unique across loadcases, Strength and Service combinations.
+        // The Number of the matching Loadcase or LoadCombination, used as ResultCase.
         public int Number { get; }
 
-        // The Name of the matching BHoM Loadcase or LoadCombination - for a combination, prefixed with
-        // its limit state.
         public string Name { get; }
 
         // Null for a loadcase.
         public TeklaStructuralDesignerLimitState? LimitState { get; }
 
         /***************************************************/
-        /****                Constructors               ****/
+        /**** Constructors                              ****/
         /***************************************************/
 
         public TsdLoadingCaseIdentity(Guid id, int number, string name, TeklaStructuralDesignerLimitState? limitState)
@@ -65,10 +57,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
-        // How the case is referred to in messages: its number and name, as in "1048 Strength 48 ...".
         public override string ToString()
         {
             return Number + " " + Name;

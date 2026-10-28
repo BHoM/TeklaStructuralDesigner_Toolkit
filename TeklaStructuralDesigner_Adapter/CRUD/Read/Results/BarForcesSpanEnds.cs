@@ -32,21 +32,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Per span end bar forces)      ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // One call per span, per end, per requested loading case - the route proven correct against a
-        // real model before this toolkit existed, and the fallback used when the batched solver route
-        // disagrees with it, or is chosen explicitly. On a model of any size this is many more calls
-        // than BarForcesFromSolver: a 4,000 span, 60 combination model is 480,000 calls here against
-        // roughly a few dozen there. Warn loudly rather than let a caller discover that by waiting.
+        // One call per span end per case: the proven route, but far slower than the solver route on a
+        // large model, so a large request is warned about.
         private List<BarForce> BarForcesFromSpanEnds(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, int timeoutSeconds)
         {
             List<BarForce> results = new List<BarForce>();
 
-            TsdAnalysisType analysisType = config.AnalysisType.ToTeklaStructuralDesigner();
-            LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
+            TsdAnalysisType analysisType = config.AnalysisType.ToTsd();
+            LoadingResultType loadingResultType = config.LoadingResultType.ToTsd();
 
             long callCount = (long)spans.Count * 2 * cases.Count;
             if (callCount > 20000)
@@ -74,7 +70,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         }
                         else if (force != null)
                         {
-                            results.Add(force.ToBHoM(span.ObjectId, loadingCase.Number, end, 2, end == 0, span.IsVertical(), config.SwapMajorMinorAxes));
+                            results.Add(force.FromTsdBarForce(span.ObjectId, loadingCase.Number, end, 2, end == 0, span.IsVertical(), config.SwapMajorMinorAxes));
                         }
                     }
                 }
@@ -88,23 +84,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The force at one end of a span (0 for its start, 1 for its end) under one loading case, read
-        // straight off the span. Null, with failure set to the reason, if the read threw.
+        // The force at the start (0) or end (1) of a span, or null with the reason in failure.
         private IForce3DLocal ReadSpanEndForce(TsdSpanIdentity span, int end, TsdLoadingCaseIdentity loadingCase, TsdAnalysisType analysisType, LoadingResultType loadingResultType, int timeoutSeconds, out string failure)
         {
-            failure = null;
-
-            try
-            {
-                return Async.RunSync(
+            IForce3DLocal force;
+            Async.TryRunSync(
                     ct => span.Span.GetEndForceAsync(end, analysisType, loadingCase.Id, loadingResultType, ct),
-                    timeoutSeconds, "reading the " + (end == 0 ? "start" : "end") + " force of span '" + span.ObjectId + "'");
-            }
-            catch (Exception e)
-            {
-                failure = e.Message;
-                return null;
-            }
+                    timeoutSeconds, "reading the " + (end == 0 ? "start" : "end") + " force of span '" + span.ObjectId + "'", out force, out failure);
+            return force;
         }
 
         /***************************************************/

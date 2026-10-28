@@ -23,23 +23,19 @@
 using System;
 using System.Collections.Generic;
 using BH.oM.Adapters.TeklaStructuralDesigner;
+using TSD.API.Remoting.Common.Properties;
 using TSD.API.Remoting.Loading;
-using TsdQuery = BH.Engine.Adapters.TeklaStructuralDesigner.Query;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Loading case identity)        ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Every loading case results can be read for: each combination at each limit state it is
-        // assessed for, then each loadcase - numbered and named exactly as the Loadcase and
-        // LoadCombination objects a Pull returns, so that either can be handed back in a result request.
-        // Which of these a request with no cases reads is decided in FilterCases, from the pull
-        // configuration; a case named on the request is always found here.
+        // Every case results can be read for, numbered and named as the pulled Loadcases and
+        // LoadCombinations so either can be used in a result request. FilterCases picks from these.
         private List<TsdLoadingCaseIdentity> BuildLoadingCaseIdentities(int timeoutSeconds)
         {
             List<TsdLoadingCaseIdentity> identities = new List<TsdLoadingCaseIdentity>();
@@ -53,12 +49,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     if (!combination.IsAssessedFor(limitState))
                         continue;
 
-                    Guid resultsId = combination.ResultsId(limitState);
-                    int number = TsdQuery.CaseNumber(combination.Number(), limitState);
-                    if (resultsId == Guid.Empty || number < 0)
-                        continue;
-
-                    identities.Add(new TsdLoadingCaseIdentity(resultsId, number, TsdQuery.CombinationName(combination.Name, limitState), limitState));
+                    TsdLoadingCaseIdentity identity = combination.CaseIdentity(limitState);
+                    if (identity != null)
+                        identities.Add(identity);
                 }
             }
 
@@ -72,10 +65,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // ResultCase should read as "the name or number of the loadcase" per BarResult's own
-        // description - never the Guid, which TSD requires internally but which means nothing to a
-        // human reading a pulled schedule.
-        private static string Identifier(string name, TSD.API.Remoting.Common.Properties.IProperty<string> userName, int index)
+        // The readable name of a case, never its Guid.
+        private static string Identifier(string name, IProperty<string> userName, int index)
         {
             if (!string.IsNullOrWhiteSpace(name))
                 return name.Trim();

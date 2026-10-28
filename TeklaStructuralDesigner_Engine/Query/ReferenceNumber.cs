@@ -28,7 +28,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The number a Tekla Structural Designer loadcase or combination name starts with - the reference number Tekla Structural Designer shows for it, as in '48 1.35Gk + 1.5LL' or '30 LL CONCOURSE'. Returns -1 if the name does not start with a number.")]

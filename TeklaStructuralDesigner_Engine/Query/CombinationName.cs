@@ -29,7 +29,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The name a LoadCombination pulled from Tekla Structural Designer is given: the limit state followed by the combination's own name, for example 'Strength 48 1.35Gk + 1.5LL' and 'Service 48 1.35Gk + 1.5LL'.")]

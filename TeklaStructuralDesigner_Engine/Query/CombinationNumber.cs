@@ -21,6 +21,7 @@
  */
 
 using System.ComponentModel;
+using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Base.Attributes;
 
 namespace BH.Engine.Adapters.TeklaStructuralDesigner
@@ -28,7 +29,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The Tekla Structural Designer combination number a BHoM case number was made from - the reverse of CaseNumber. Returns -1 for a number that is not a combination case number, such as a loadcase's.")]
@@ -36,8 +37,8 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
         [Output("combinationNumber", "The combination's number as shown in Tekla Structural Designer.")]
         public static int CombinationNumber(int caseNumber)
         {
-            int band = caseNumber / NumberBand;
-            return band == StrengthBand || band == ServiceBand ? caseNumber % NumberBand : -1;
+            TeklaStructuralDesignerLimitState limitState;
+            return LimitState(caseNumber, out limitState) ? caseNumber % NumberBand : -1;
         }
 
         /***************************************************/

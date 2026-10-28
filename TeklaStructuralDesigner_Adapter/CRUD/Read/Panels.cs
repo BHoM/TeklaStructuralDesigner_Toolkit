@@ -46,34 +46,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
-        // Angles (in radians) and unit vector lengths below this are zero when deciding which way an
-        // element spans.
+        // Angles (rad) and vector lengths below this are zero when deciding a span direction.
         private const double SpanAngleTolerance = 1e-4;
 
-        // Distance (in metres) within which a wall panel's bottom edge is at the base of its wall, and a
-        // Panel edge is the bottom edge it was built from - the millimetre precision used elsewhere.
+        // Distance (m) within which a wall panel edge is at the base of its wall.
         private const double WallBaseTolerance = 1e-3;
 
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Panels)                       ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Every 2D element in the model as a BHoM Panel: slab items, structural wall panels, roofs and
-        // wind walls. Push is not supported.
-        //
-        // Slab items and wall panels carry their structural property. Roofs and wind walls exist in
-        // Tekla Structural Designer only to collect load and pass it to the frame, so they carry a
-        // LoadingPanelProperty - no material, no thickness, no stiffness - and their span direction.
-        //
-        // The span direction of every Panel is its local x; see Convert.ToBHoMPanel.
-        //
-        // The ids of the request are matched against the readable identifier on each Panel's
-        // TeklaStructuralDesignerId - the slab item, roof or wind wall name, or 'WallName:PanelIndex' for
-        // a wall panel - or against the element's name, so a whole wall can be asked for by name.
+        // Slab items and wall panels carry their structural property; roofs and wind walls only collect
+        // load, so carry a LoadingPanelProperty. Ids match the TeklaStructuralDesignerId (slab item,
+        // roof or wind wall name, or 'WallName:PanelIndex') or the element name.
         private List<Panel> ReadPanels(IList ids, TeklaStructuralDesignerPullConfig config)
         {
             int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
@@ -82,21 +70,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
             List<Panel> panels = ReadAllPanels(timeout, state, null);
             state.Report();
 
-            if (ids == null || ids.Count == 0)
+            HashSet<string> requested = RequestedIds(ids);
+            if (requested == null)
                 return panels;
 
-            HashSet<string> requested = new HashSet<string>(ids.Cast<object>().Where(id => id != null).Select(id => id.ToString()), StringComparer.OrdinalIgnoreCase);
             return panels.Where(p => IsRequested(p, requested)).ToList();
         }
 
         /***************************************************/
 
-        // The Panels an area load on a Tekla Structural Designer element lands on, keyed by that
-        // element: a slab item, a whole slab (all of its items), a structural wall (all of its panels),
-        // a roof or a wind wall. Read from each Panel's TeklaStructuralDesignerPanelProperties fragment,
-        // so that which element a Panel belongs to is recorded in one place. Only the kinds of element
-        // the loads are on are read. These Panels only identify what a load acts on, so, as for the Bars
-        // loads are pulled against, nothing about how they were built is reported.
+        // The Panels an area load on an element lands on, keyed by that element: a slab item, a whole
+        // slab, a wall, a roof or a wind wall. Nothing about how they were built is reported.
         private Dictionary<Tuple<EntityType, int>, List<Panel>> PanelsByElement(ICollection<EntityType> elementTypes, int timeout)
         {
             Dictionary<Tuple<EntityType, int>, List<Panel>> result = new Dictionary<Tuple<EntityType, int>, List<Panel>>();
@@ -118,8 +102,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Every Panel of the given kinds of element, or of every kind if elementTypes is null. The
-        // ElementType on each Panel's fragment is the name of the EntityType it came from.
+        // Every Panel of the given kinds of element, or of every kind if elementTypes is null.
         private List<Panel> ReadAllPanels(int timeout, PanelReadState state, ICollection<EntityType> elementTypes)
         {
             Func<EntityType, bool> wanted = t => elementTypes == null || elementTypes.Contains(t);
@@ -148,47 +131,35 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // One Panel per slab item. A slab in Tekla Structural Designer is a group of slab items sharing
-        // one set of slab data (type, deck, material); the slab item is the panel that is drawn and
-        // analysed, and may override the slab's depth.
-        //
-        // The outline comes from the item's Complete contour: its definition with column drops cut out
-        // of it and slab openings applied as holes, which become the Panel's Openings. The contour is in
-        // the local coordinates of the item's element plane.
+        // One Panel per slab item, from its Complete contour (column drops cut out, openings as holes).
+        // The slab supplies the type, deck and material; the item may override the depth.
         private List<Panel> ReadSlabPanels(int timeout, PanelReadState state)
         {
             List<Panel> result = new List<Panel>();
 
-            List<ISlabItem> items;
-            Dictionary<int, ISlab> slabByIndex;
-            try
-            {
-                slabByIndex = Async.RunSync(ct => m_Model.GetSlabsAsync(null, ct), timeout, "reading slabs").ToDictionary(s => s.Index);
-                items = Async.RunSync(ct => m_Model.GetSlabItemsAsync(null, ct), timeout, "reading slab items").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read slabs from Tekla Structural Designer, so no slab Panels have been pulled. " + e.Message);
+            const string consequence = "no slab Panels have been pulled";
+            IEnumerable<ISlab> slabs;
+            IEnumerable<ISlabItem> items;
+            if (!Async.TryRunSync(ct => m_Model.GetSlabsAsync(null, ct), timeout, "reading slabs", consequence, out slabs, true) ||
+                !Async.TryRunSync(ct => m_Model.GetSlabItemsAsync(null, ct), timeout, "reading slab items", consequence, out items, true))
                 return result;
-            }
+
+            Dictionary<int, ISlab> slabByIndex = slabs.ToDictionary(s => s.Index);
 
             foreach (ISlabItem item in items)
             {
                 TsdPlane plane = item.ElementPlane.ValueOrDefault();
                 if (plane == null)
                 {
-                    state.Skip("slab item(s)", "Tekla Structural Designer reported no plane for them");
+                    state.Warnings.Skip("slab item(s)", "Tekla Structural Designer reported no plane for them");
                     continue;
                 }
 
-                List<IPolygonWithHoles2D> contours;
-                try
+                IEnumerable<IPolygonWithHoles2D> contours;
+                string error;
+                if (!Async.TryRunSync(ct => item.GetContoursAsync(SlabContourType.Complete, ct), timeout, "reading the outline of slab item '" + item.Name + "'", out contours, out error))
                 {
-                    contours = Async.RunSync(ct => item.GetContoursAsync(SlabContourType.Complete, ct), timeout, "reading the outline of slab item '" + item.Name + "'").ToList();
-                }
-                catch (Exception e)
-                {
-                    state.Skip("slab item(s)", "their outline could not be read (" + e.Message + ")");
+                    state.Warnings.Skip("slab item(s)", "their outline could not be read (" + error + ")");
                     continue;
                 }
 
@@ -207,7 +178,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 IMaterialFragment material = state.Materials.Material(slabData != null ? slabData.Material.ValueOrDefault() : null);
 
                 string approximation;
-                ISurfaceProperty property = state.Shared(slabData.ToBHoMSurfaceProperty(depth, material, panelType, state.Detailed, out approximation));
+                ISurfaceProperty property = state.Shared(slabData.FromTsdSurfaceProperty(depth, material, panelType, state.Detailed, out approximation));
                 if (approximation != null)
                     state.Approximate(approximation);
 
@@ -233,10 +204,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 foreach (IPolygonWithHoles2D contour in contours)
                 {
                     IPolygon2D outer = contour.Contour.ValueOrDefault();
-                    Polyline outline = outer != null ? outer.Vertices.ValuesOrEmpty().ToBHoMPolyline(plane) : null;
-                    List<Polyline> holes = contour.Holes.ValuesOrEmpty().Select(h => h.Vertices.ValuesOrEmpty().ToBHoMPolyline(plane)).Where(h => h != null).ToList();
+                    Polyline outline = outer != null ? outer.Vertices.ValuesOrEmpty().FromTsdPolyline(plane) : null;
+                    List<Polyline> holes = contour.Holes.ValuesOrEmpty().Select(h => h.Vertices.ValuesOrEmpty().FromTsdPolyline(plane)).Where(h => h != null).ToList();
 
-                    Panel panel = Convert.ToBHoMPanel(outline, holes, property, localX, normal, item.Name);
+                    Panel panel = Convert.FromTsdPanel(outline, holes, property, localX, normal, item.Name);
                     if (panel == null)
                         continue;
 
@@ -245,7 +216,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
 
                 if (built == 0)
-                    state.Skip("slab item(s)", "their outline did not enclose an area");
+                    state.Warnings.Skip("slab item(s)", "their outline did not enclose an area");
                 else if (built > 1)
                     state.Approximate("they are cut into separate pieces by openings or column drops, and each piece has been pulled as a Panel of its own sharing the slab item's identifier");
             }
@@ -255,59 +226,44 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // One Panel per wall panel. A structural wall in Tekla Structural Designer is split into panels
-        // between levels, each with its own thickness and material; the wall panel is what is analysed.
-        //
-        // The outline is the panel's bottom and top edges as Tekla Structural Designer reports them, and
-        // local x runs horizontally along the wall. Wall openings become Openings of every wall panel
-        // they lie wholly inside; one that straddles two panels cannot be split between them and is left
-        // out, with a warning.
+        // One Panel per wall panel, between its bottom and top edges, with local x along the wall.
+        // Openings wholly inside a wall panel become its Openings; ones straddling two are left out.
         private List<Panel> ReadWallPanels(int timeout, PanelReadState state)
         {
             List<Panel> result = new List<Panel>();
 
-            List<IStructuralWall> walls;
-            try
-            {
-                walls = Async.RunSync(ct => m_Model.GetStructuralWallsAsync(null, ct), timeout, "reading structural walls").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read structural walls from Tekla Structural Designer, so no wall Panels have been pulled. " + e.Message);
+            IEnumerable<IStructuralWall> walls;
+            if (!Async.TryRunSync(ct => m_Model.GetStructuralWallsAsync(null, ct), timeout, "reading structural walls", "no wall Panels have been pulled", out walls, true))
                 return result;
-            }
 
             foreach (IStructuralWall wall in walls)
             {
                 int count = wall.SpanCount.ValueOrDefault(0);
                 if (count <= 0)
                 {
-                    state.Skip("wall(s)", "they have no panels");
+                    state.Warnings.Skip("wall(s)", "they have no panels");
                     continue;
                 }
 
-                List<IStructuralWallPanel> wallPanels;
-                try
+                IEnumerable<IStructuralWallPanel> panelsRead;
+                string error;
+                if (!Async.TryRunSync(ct => wall.GetSpanAsync(Enumerable.Range(0, count), ct), timeout, "reading the panels of wall '" + wall.Name + "'", out panelsRead, out error))
                 {
-                    wallPanels = Async.RunSync(ct => wall.GetSpanAsync(Enumerable.Range(0, count), ct), timeout, "reading the panels of wall '" + wall.Name + "'").ToList();
-                }
-                catch (Exception e)
-                {
-                    state.Skip("wall(s)", "their panels could not be read (" + e.Message + ")");
+                    state.Warnings.Skip("wall(s)", "their panels could not be read (" + error + ")");
                     continue;
                 }
 
+                List<IStructuralWallPanel> wallPanels = panelsRead.ToList();
                 IStructuralWallData wallData = wall.StructuralWallData.ValueOrDefault();
                 TsdPlane wallPlane = wall.ElementPlane.ValueOrDefault();
                 BHoMVector wallNormal = wallPlane != null ? Normal(wallPlane) : null;
 
-                // The support the wall generates along its base, carried by the bottom edge of every wall
-                // panel that sits at the base.
+                // The wall's base support goes on the bottom edge of every wall panel at the base.
                 Constraint6DOF baseSupport = WallBaseSupport(wallData, state);
                 double baseZ = wallPanels
                     .Select(p => p.BottomSegment.ValueOrDefault())
                     .Where(s => s != null)
-                    .SelectMany(s => new[] { s.GetPoint(Location.Start).ToBHoMPoint().Z, s.GetPoint(Location.End).ToBHoMPoint().Z })
+                    .SelectMany(s => new[] { s.GetPoint(Location.Start).FromTsdPoint().Z, s.GetPoint(Location.End).FromTsdPoint().Z })
                     .DefaultIfEmpty(double.NaN)
                     .Min();
                 bool baseSupported = false;
@@ -318,17 +274,16 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     ISegment3D top = wallPanel.TopSegment.ValueOrDefault();
                     if (bottom == null || top == null)
                     {
-                        state.Skip("wall panel(s)", "Tekla Structural Designer reported no top or bottom edge for them");
+                        state.Warnings.Skip("wall panel(s)", "Tekla Structural Designer reported no top or bottom edge for them");
                         continue;
                     }
 
-                    BHoMPoint b0 = bottom.GetPoint(Location.Start).ToBHoMPoint();
-                    BHoMPoint b1 = bottom.GetPoint(Location.End).ToBHoMPoint();
-                    BHoMPoint t0 = top.GetPoint(Location.Start).ToBHoMPoint();
-                    BHoMPoint t1 = top.GetPoint(Location.End).ToBHoMPoint();
+                    BHoMPoint b0 = bottom.GetPoint(Location.Start).FromTsdPoint();
+                    BHoMPoint b1 = bottom.GetPoint(Location.End).FromTsdPoint();
+                    BHoMPoint t0 = top.GetPoint(Location.Start).FromTsdPoint();
+                    BHoMPoint t1 = top.GetPoint(Location.End).FromTsdPoint();
 
-                    // The top edge is expected to run the same way as the bottom one; if it runs the other
-                    // way, walking bottom then top back would cross the outline over itself.
+                    // A top edge running the other way would cross the outline over itself.
                     if (b1.Distance(t1) > b1.Distance(t0))
                     {
                         BHoMPoint swap = t0;
@@ -336,19 +291,19 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         t1 = swap;
                     }
 
-                    Polyline outline = Convert.ClosedPolyline(new[] { b0, b1, t1, t0 });
+                    Polyline outline = Helpers.ClosedPolyline(new[] { b0, b1, t1, t0 });
 
                     IStructuralWallPanelData panelData = wallPanel.WallPanelData.ValueOrDefault();
                     IMaterialFragment material = state.Materials.Material(panelData != null ? panelData.Material.ValueOrDefault() : null);
-                    ISurfaceProperty property = state.Shared(panelData.ToBHoMSurfaceProperty(material));
+                    ISurfaceProperty property = state.Shared(panelData.FromTsdSurfaceProperty(material));
 
                     List<Polyline> openings = WallOpenings(wallPanel, outline, timeout, state);
 
                     string id = wall.Name + ":" + wallPanel.Index;
-                    Panel panel = Convert.ToBHoMPanel(outline, openings, property, b1 - b0, wallNormal, id);
+                    Panel panel = Convert.FromTsdPanel(outline, openings, property, b1 - b0, wallNormal, id);
                     if (panel == null)
                     {
-                        state.Skip("wall panel(s)", "their outline did not enclose an area");
+                        state.Warnings.Skip("wall panel(s)", "their outline did not enclose an area");
                         continue;
                     }
 
@@ -368,7 +323,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
 
                 if (baseSupport != null && !baseSupported)
-                    state.Warn("wall(s) generate a support along their base, but no wall panel edge was found there to carry it, so they have been pulled unsupported");
+                    state.Warnings.Add("wall(s) generate a support along their base, but no wall panel edge was found there to carry it, so they have been pulled unsupported");
             }
 
             return result;
@@ -376,19 +331,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The support a structural wall generates along its base, or null if it generates none.
-        //
-        // Tekla Structural Designer holds this on the wall itself - its GenerateSupport switch and
-        // SupportData - not as a support on a construction point, so it is not among the supports the
-        // Nodes are pulled with, and walls used to be pulled free at their base. A BHoM Panel carries a
-        // line support on the Support of an external edge, which Robot applies to that edge of the
-        // panel. The SupportData is the same type as a point support's, so it is converted the same way,
-        // with springs and partial fixity reported rather than converted.
-        //
-        // AutomaticGenerateSupport leaves Tekla Structural Designer to decide whether the wall is
-        // supported. Where it is switched on and GenerateSupport reports no support, that is taken as
-        // Tekla Structural Designer's decision, but it has not been checked against a live model, so it
-        // is warned about.
+        // The support a wall generates along its base (GenerateSupport and SupportData on the wall, not a
+        // point support), or null. Springs and partial fixity are reported rather than converted.
         private static Constraint6DOF WallBaseSupport(IStructuralWallData wallData, PanelReadState state)
         {
             if (wallData == null)
@@ -397,30 +341,29 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (!wallData.GenerateSupport.ValueOrDefault(false))
             {
                 if (wallData.AutomaticGenerateSupport.ValueOrDefault(false))
-                    state.Warn("wall(s) leave Tekla Structural Designer to decide whether they generate a base support, and it reported none, so they have been pulled unsupported at the base. Check this against the model");
+                    state.Warnings.Add("wall(s) leave Tekla Structural Designer to decide whether they generate a base support, and it reported none, so they have been pulled unsupported at the base. Check this against the model");
 
                 return null;
             }
 
             bool isPartial;
-            Constraint6DOF support = wallData.SupportData.ValueOrDefault().ToBHoM(out isPartial);
+            Constraint6DOF support = wallData.SupportData.ValueOrDefault().FromTsdConstraint(out isPartial);
             if (support == null)
             {
-                state.Warn("wall(s) generate a base support but Tekla Structural Designer reported no fixity for it, so they have been pulled unsupported at the base");
+                state.Warnings.Add("wall(s) generate a base support but Tekla Structural Designer reported no fixity for it, so they have been pulled unsupported at the base");
                 return null;
             }
 
             if (isPartial)
-                state.Warn("wall base support(s) have spring or partial fixity in at least one direction. Their fixed and free directions have been pulled, but the springs have not");
+                state.Warnings.Add("wall base support(s) have spring or partial fixity in at least one direction. Their fixed and free directions have been pulled, but the springs have not");
 
             return support;
         }
 
         /***************************************************/
 
-        // Puts the support on the external edge of the Panel running between start and end, in either
-        // direction - found by its end points, because Convert.ToBHoMPanel may have reversed the outline
-        // or started it elsewhere. False if no edge runs between them.
+        // Puts the support on the external edge between start and end, in either direction. False if
+        // there is none.
         private static bool SupportEdge(Panel panel, BHoMPoint start, BHoMPoint end, Constraint6DOF support)
         {
             foreach (Edge edge in panel.ExternalEdges ?? new List<Edge>())
@@ -444,26 +387,19 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // A wall opening is a rectangle Width wide and Height high, in the coordinates of its reference
-        // plane, whose corner is Offset from its reference point - not from the origin of the plane, which
-        // can be far from the wall. Checked on a live model: an opening with Offset (-1990, 1175), 655 by
-        // 600, referenced from the wall's start point, lies exactly where the solver mesh has its four
-        // corner nodes. Width and Height run along the plane's own positive axes, whichever way the wall
-        // itself runs - which is why the Offset along the wall can be negative.
+        // A wall opening is a Width by Height rectangle in its reference plane, with its corner at
+        // Offset from its reference point (not the plane origin). Verified against the solver mesh.
         private static List<Polyline> WallOpenings(IStructuralWallPanel wallPanel, Polyline outline, int timeout, PanelReadState state)
         {
             List<Polyline> result = new List<Polyline>();
             if (outline == null)
                 return result;
 
-            List<IWallOpening> openings;
-            try
+            IEnumerable<IWallOpening> openings;
+            string error;
+            if (!Async.TryRunSync(ct => wallPanel.GetOpeningsAsync(false, ct), timeout, "reading wall openings", out openings, out error))
             {
-                openings = Async.RunSync(ct => wallPanel.GetOpeningsAsync(false, ct), timeout, "reading wall openings").ToList();
-            }
-            catch (Exception e)
-            {
-                state.Skip("wall opening(s)", "they could not be read (" + e.Message + ")");
+                state.Warnings.Skip("wall opening(s)", "they could not be read (" + error + ")");
                 return result;
             }
 
@@ -474,13 +410,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 double height = opening.Height.ValueOrDefault(0);
                 if (plane == null || width <= 0 || height <= 0)
                 {
-                    state.Skip("wall opening(s)", "they have no reference plane or no size");
+                    state.Warnings.Skip("wall opening(s)", "they have no reference plane or no size");
                     continue;
                 }
 
                 if (opening.ReferenceCoordinates == null || !opening.ReferenceCoordinates.IsApplicable)
                 {
-                    state.Skip("wall opening(s)", "they have no reference point to be placed from");
+                    state.Warnings.Skip("wall opening(s)", "they have no reference point to be placed from");
                     continue;
                 }
 
@@ -499,13 +435,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     new Point2D(x, y + height),
                 };
 
-                Polyline rectangle = corners.ToBHoMPolyline(plane);
+                Polyline rectangle = corners.FromTsdPolyline(plane);
                 if (rectangle == null)
                     continue;
 
                 if (!outline.IsContaining(rectangle.ControlPoints, true, 1e-3))
                 {
-                    state.Skip("wall opening(s)", "they straddle more than one wall panel, or fall outside the panel they were reported against");
+                    state.Warnings.Skip("wall opening(s)", "they straddle more than one wall panel, or fall outside the panel they were reported against");
                     continue;
                 }
 
@@ -517,30 +453,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Roofs and wind walls, as loading panels. Their outline is the construction points they are
-        // drawn between, and they span one way along the span direction set in Tekla Structural Designer.
+        // Roofs and wind walls, outlined by their construction points and spanning one way.
         private List<Panel> ReadLoadingPanels(int timeout, PanelReadState state)
         {
             List<Panel> result = new List<Panel>();
 
-            List<IRoof> roofs = new List<IRoof>();
-            List<IWindWall> windWalls = new List<IWindWall>();
-            try
-            {
-                roofs = Async.RunSync(ct => m_Model.GetRoofsAsync(null, ct), timeout, "reading roofs").ToList();
-                windWalls = Async.RunSync(ct => m_Model.GetWindWallsAsync(null, ct), timeout, "reading wind walls").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read roofs and wind walls from Tekla Structural Designer, so no loading Panels have been pulled. " + e.Message);
+            const string consequence = "no loading Panels have been pulled";
+            IEnumerable<IRoof> roofs;
+            IEnumerable<IWindWall> windWalls;
+            if (!Async.TryRunSync(ct => m_Model.GetRoofsAsync(null, ct), timeout, "reading roofs", consequence, out roofs, true) ||
+                !Async.TryRunSync(ct => m_Model.GetWindWallsAsync(null, ct), timeout, "reading wind walls", consequence, out windWalls, true))
                 return result;
-            }
 
             List<TsdAreaElement> elements = roofs.Cast<TsdAreaElement>().Concat(windWalls).ToList();
             if (elements.Count == 0)
                 return result;
 
-            // One batched call for every construction point the elements are drawn between.
             HashSet<int> pointIndices = new HashSet<int>(elements.SelectMany(e => e.ConstructionPointIndices ?? new List<int>()));
             Dictionary<int, ConstructionPointInfo> pointByIndex = BuildConstructionPointInfoByIndex(pointIndices, timeout);
 
@@ -560,7 +488,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
                 if (points.Count != indices.Count)
                 {
-                    state.Skip(kind, "one or more of the construction points they are drawn between could not be read");
+                    state.Warnings.Skip(kind, "one or more of the construction points they are drawn between could not be read");
                     continue;
                 }
 
@@ -570,16 +498,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 if (plane != null)
                     span = roof != null ? SpanDirection(element, plane, state) : PlaneX(plane);
 
-                // Wind wall span direction is not supported: the API does not report a wind wall's
-                // rotation angle, so a wind wall keeps the x axis of its element plane, and every one
-                // pulled is warned about.
+                // The API reports no rotation angle for wind walls, so they keep their plane's x axis.
                 if (roof == null)
-                    state.Warn("wind wall(s) have been pulled spanning along the x axis of their element plane, which is horizontal along the wall. Wind wall span direction is not supported at the moment: Tekla Structural Designer's API does not report a wind wall's rotation angle, so a wind wall rotated in Tekla Structural Designer - 90 degrees to span vertically between floors - will span the wrong way. Check the cladding direction of every wind wall in the receiving model");
+                    state.Warnings.Add("wind wall(s) have been pulled spanning along the x axis of their element plane, which is horizontal along the wall. Wind wall span direction is not supported at the moment: Tekla Structural Designer's API does not report a wind wall's rotation angle, so a wind wall rotated in Tekla Structural Designer - 90 degrees to span vertically between floors - will span the wrong way. Check the cladding direction of every wind wall in the receiving model");
 
-                Panel panel = Convert.ToBHoMPanel(Convert.ClosedPolyline(points), null, null, span, normal, element.Name);
+                Panel panel = Convert.FromTsdPanel(Helpers.ClosedPolyline(points), null, null, span, normal, element.Name);
                 if (panel == null)
                 {
-                    state.Skip(kind, "their outline did not enclose an area");
+                    state.Warnings.Skip(kind, "their outline did not enclose an area");
                     continue;
                 }
 
@@ -603,26 +529,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The direction a slab item or roof spans in: the x axis of its element plane, turned through the
-        // element's RotationAngle where the plane has not already been.
-        //
-        // The API documents the element plane as respecting the element's orientation, but project
-        // models tested in October 2026 showed rotated slab items whose element plane x had not been
-        // turned: slab items that all spanned the same way, and terrace slabs a quarter turn out. So the
-        // plane's x is compared with the element's unrotated direction, global X laid onto its plane:
-        //  - if they agree and the element has a RotationAngle, the plane has not been turned, and the
-        //    rotation is applied here, anticlockwise about the element's normal;
-        //  - if the plane's x is already turned by the RotationAngle, it is used as it is, so the rotation
-        //    is never applied twice;
-        //  - if it is neither, which can happen on a sloped plane whose x is not global X laid onto the
-        //    slope, the plane is taken as it is, with a warning.
-        // Only a quarter turn has been seen on a live model, which reads the same whichever way the
-        // rotation is measured; other angles assume anticlockwise about the normal.
-        //
-        // Wind walls do not come through here. Checked on a live Tekla Structural Designer 2026 SP1
-        // model, every wind wall reports its RotationAngle as not applicable, with no value behind it -
-        // including one shown in Tekla Structural Designer at 90 degrees - so a wind wall simply keeps
-        // the x axis of its element plane; see ReadLoadingPanels.
+        // The element plane's x axis, turned through the element's RotationAngle unless the plane is
+        // already turned. Project models showed rotated slab items whose plane had not been, so the
+        // plane's x is compared with global X laid onto the plane:
+        //  - in line with it: the rotation is applied here, anticlockwise about the normal;
+        //  - already turned by the rotation: used as it is;
+        //  - neither (possible on a sloped plane): used as it is, with a warning.
         private static BHoMVector SpanDirection(TsdAreaElement element, TsdPlane plane, PanelReadState state)
         {
             BHoMVector x = PlaneX(plane);
@@ -645,15 +557,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
             double turned = Math.Abs(rotationAngle) % Math.PI;
             turned = Math.Min(turned, Math.PI - turned);
             if (Math.Abs(offset - turned) > SpanAngleTolerance)
-                state.Warn("rotated slab item(s) or roof(s) have an element plane that is neither in their unrotated direction nor turned through their rotation angle, so their span direction has been taken from the plane as Tekla Structural Designer reports it");
+                state.Warnings.Add("rotated slab item(s) or roof(s) have an element plane that is neither in their unrotated direction nor turned through their rotation angle, so their span direction has been taken from the plane as Tekla Structural Designer reports it");
 
             return x;
         }
 
         /***************************************************/
 
-        // The unrotated span direction of a slab item or roof: global X laid onto its plane. Null for a
-        // plane square to global X, which has no such direction.
+        // Global X projected onto the plane, or null for a plane square to global X.
         private static BHoMVector GlobalXOnPlane(BHoMVector normal)
         {
             BHoMVector globalX = new BHoMVector { X = 1 };
@@ -663,18 +574,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The x axis of an element plane as Tekla Structural Designer reports it, or null if it reports
-        // none.
         private static BHoMVector PlaneX(TsdPlane plane)
         {
-            BHoMVector x = plane.LCS.ValueOrDefault().Axes.XAxis.ToBHoMVector();
+            BHoMVector x = plane.LCS.ValueOrDefault().Axes.XAxis.FromTsdVector();
             return x.Length() > 0 ? x.Normalise() : null;
         }
 
         /***************************************************/
 
-        // The angle between two directions as axes, ignoring which way along them each points: 0 to a
-        // quarter turn.
+        // The angle between two axes regardless of sense: 0 to a quarter turn.
         private static double AxisAngle(BHoMVector a, BHoMVector b)
         {
             double angle = a.Angle(b);
@@ -685,7 +593,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         private static BHoMVector Normal(TsdPlane plane)
         {
-            BHoMVector normal = plane.Normal.ValueOrDefault().ToBHoMVector();
+            BHoMVector normal = plane.Normal.ValueOrDefault().FromTsdVector();
             return normal.Length() > 0 ? normal.Normalise() : null;
         }
 
@@ -699,90 +607,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             TeklaStructuralDesignerPanelProperties properties = panel.FindFragment<TeklaStructuralDesignerPanelProperties>();
             return properties != null && requested.Contains(properties.ElementName);
-        }
-
-        /***************************************************/
-        /****            Private Nested Types           ****/
-        /***************************************************/
-
-        // What one Panel pull shares across slabs, walls and loading panels: the material cache, one
-        // surface property object per distinct property, and the reasons anything was skipped or
-        // approximated, reported once each with a count rather than once per element.
-        private sealed class PanelReadState
-        {
-            public BarPropertyCache Materials { get; } = new BarPropertyCache();
-
-            // Whether composite and precast slabs get their detailed BHoM types rather than a solid slab
-            // of their overall depth; see Convert.ToBHoMSurfaceProperty and the pull configuration.
-            public bool Detailed { get; set; }
-
-            public ISurfaceProperty Shared(ISurfaceProperty property)
-            {
-                if (property == null)
-                    return null;
-
-                string key = property.GetType().Name + "|" + ((BH.oM.Base.IBHoMObject)property).Name;
-                ISurfaceProperty existing;
-                if (m_Properties.TryGetValue(key, out existing))
-                    return existing;
-
-                m_Properties[key] = property;
-                return property;
-            }
-
-            // The one way LoadingPanelProperty every roof and wind wall shares. TwoSides is BHoM's one way
-            // load distribution: the load goes to the two sides the span runs between. ReferenceEdge 1 is
-            // the Panel's first external edge, which Convert.ToBHoMPanel makes the edge along the span.
-            public LoadingPanelProperty LoadingPanelProperty()
-            {
-                if (m_LoadingProperty == null)
-                {
-                    m_LoadingProperty = new LoadingPanelProperty
-                    {
-                        Name = "One way loading panel",
-                        LoadApplication = LoadPanelSupportConditions.TwoSides,
-                        ReferenceEdge = 1,
-                    };
-                }
-
-                return m_LoadingProperty;
-            }
-
-            public void Skip(string what, string reason)
-            {
-                Count(m_Skipped, what + " were skipped because " + reason);
-            }
-
-            public void Approximate(string reason)
-            {
-                Count(m_Approximated, reason);
-            }
-
-            // Anything else worth a counted warning, given as a sentence that follows its count.
-            public void Warn(string message)
-            {
-                Count(m_Warned, message);
-            }
-
-            public void Report()
-            {
-                foreach (KeyValuePair<string, int> skipped in m_Skipped)
-                    Engine.Base.Compute.RecordWarning(skipped.Value + " " + skipped.Key + ".");
-
-                foreach (KeyValuePair<string, int> approximated in m_Approximated)
-                    Engine.Base.Compute.RecordWarning(approximated.Value + " slab item(s) have been approximated: " + approximated.Key + ".");
-
-                foreach (KeyValuePair<string, int> warned in m_Warned)
-                    Engine.Base.Compute.RecordWarning(warned.Value + " " + warned.Key + ".");
-
-                Materials.Report();
-            }
-
-            private readonly Dictionary<string, ISurfaceProperty> m_Properties = new Dictionary<string, ISurfaceProperty>();
-            private LoadingPanelProperty m_LoadingProperty;
-            private readonly Dictionary<string, int> m_Skipped = new Dictionary<string, int>();
-            private readonly Dictionary<string, int> m_Approximated = new Dictionary<string, int>();
-            private readonly Dictionary<string, int> m_Warned = new Dictionary<string, int>();
         }
 
         /***************************************************/

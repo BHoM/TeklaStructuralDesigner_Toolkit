@@ -36,11 +36,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Fields                 ****/
+        /**** Private Fields                            ****/
         /***************************************************/
 
-        // Every load Tekla Structural Designer draws on a plane or an area element. All are read, so
-        // that the ones with no BHoM equivalent are reported rather than silently missing.
+        // Every planar load type, all read so the unconvertible ones are reported rather than missing.
         private static readonly TsdLoadType[] m_PlanarLoadTypes =
         {
             TsdLoadType.Slab, TsdLoadType.UniformAreaElement, TsdLoadType.VariableAreaElement, TsdLoadType.ConstructionPlane,
@@ -52,31 +51,19 @@ namespace BH.Adapter.TeklaStructuralDesigner
         private static readonly TsdLoadType[] m_PulledLoadTypes = new[] { TsdLoadType.Member, TsdLoadType.Nodal }.Concat(m_PlanarLoadTypes).ToArray();
 
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Area loads)                   ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Converts the planar loads of a load pull:
-        //
-        //   - a uniform load on a whole element (slab item, slab, wall, roof, wind wall) becomes an
-        //     AreaUniformlyDistributedLoad on the Panels pulled for that element;
-        //   - a rectangular or polygonal patch load becomes a ContourLoad over its outline;
-        //   - a line load drawn on a plane becomes a GeometricalLineLoad.
-        //
-        // Refused, each with a counted reason: point loads on a plane (BHoM has no point load that is not
-        // on a Node), varying area and polygonal loads (no BHoM equivalent), perimeter loads (a line load
-        // along a slab's edges, not yet mapped), loads on a whole construction plane (no BHoM element to
-        // carry them), and loads on a vertical construction plane, which the API offers no way to read
-        // the plane of.
-        private List<BHoMLoad> ReadPlanarLoads(List<PendingLoad> planar, Dictionary<string, int> skipReasons, int timeout)
+        // Uniform loads on an element become AreaUniformlyDistributedLoads on its Panels, patch loads
+        // ContourLoads and line loads GeometricalLineLoads. Point, varying, perimeter and whole plane
+        // loads, and loads on vertical construction planes, are skipped with a counted reason.
+        private List<BHoMLoad> ReadPlanarLoads(List<PendingLoad> planar, WarningTally warnings, int timeout)
         {
             List<BHoMLoad> result = new List<BHoMLoad>();
             if (planar.Count == 0)
                 return result;
 
-            // Only read what the convertible loads present actually need: the Panels of the kinds of
-            // element uniform loads are on, and the construction planes only if a patch or line load
-            // is there to be placed on one.
+            // Only read the Panels and planes the convertible loads need.
             HashSet<EntityType> elementTypes = new HashSet<EntityType>(planar
                 .Select(p => p.Load as IPlanarAreaElementLoad)
                 .Where(l => l != null && !(l is IConstructionPlaneLoad) && UniformLoad(l, out _))
@@ -108,19 +95,19 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 {
                     List<Panel> panels;
                     if (panelsByElement.TryGetValue(Tuple.Create(onElement.AreaElementInfo.Type, onElement.AreaElementInfo.Index), out panels) && panels.Count > 0)
-                        converted = load.ToBHoM(uniform, panels, p.Loadcase, out skipReason);
+                        converted = load.FromTsdAreaLoad(uniform, panels, p.Loadcase, out skipReason);
                     else
                         skipReason = "the " + onElement.AreaElementInfo.Type + " they are applied to could not be matched to a pulled Panel";
                 }
                 else if (isUniform && load is IPolygonalLoad patch)
                 {
                     if (TryPlane(load, planeByInfo, out plane, out skipReason))
-                        converted = patch.ToBHoMContour(uniform, plane, p.Loadcase, out skipReason);
+                        converted = patch.FromTsdContourLoad(uniform, plane, p.Loadcase, out skipReason);
                 }
                 else if (load is IUniformLineLoad line)
                 {
                     if (TryPlane(load, planeByInfo, out plane, out skipReason))
-                        converted = line.ToBHoM(plane, p.Loadcase, out skipReason);
+                        converted = line.FromTsdLineLoad(plane, p.Loadcase, out skipReason);
                 }
                 else if (load is IPointLoad)
                 {
@@ -142,7 +129,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 if (converted != null)
                     result.Add(converted);
                 else
-                    Count(skipReasons, skipReason);
+                    warnings.Skip("load(s)", skipReason);
             }
 
             return result;
@@ -150,9 +137,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The single load value of the uniform planar load types, in N/mm².
-        // The API gives the five uniform planar load types no shared interface for their value, so each
-        // is asked in turn.
+        // The value (N/mm²) of a uniform planar load. These types share no interface for it.
         private static bool UniformLoad(IPlanarLoad load, out double value)
         {
             switch (load)
@@ -182,8 +167,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The plane of every level and sloped construction plane, keyed the way a planar load refers to
-        // its plane. A patch or line load's coordinates are in the local coordinates of that plane.
+        // The plane of every level and slope, keyed as planar loads refer to them.
         private Dictionary<Tuple<EntityType, int>, TsdPlane> ConstructionPlanes(int timeout)
         {
             Dictionary<Tuple<EntityType, int>, TsdPlane> result = new Dictionary<Tuple<EntityType, int>, TsdPlane>();
@@ -191,14 +175,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (IHorizontalConstructionPlane level in ReadTsdLevels(timeout, "patch and line loads on levels cannot be placed"))
                 result[Tuple.Create(EntityType.HorizontalConstructionPlane, level.Index)] = level.Plane.ValueOrDefault();
 
-            try
+            IEnumerable<ISlopedConstructionPlane> slopes;
+            if (Async.TryRunSync(ct => m_Model.GetSlopesAsync(null, ct), timeout, "reading sloped planes", "patch and line loads on them cannot be placed", out slopes))
             {
-                foreach (ISlopedConstructionPlane slope in Async.RunSync(ct => m_Model.GetSlopesAsync(null, ct), timeout, "reading sloped planes"))
+                foreach (ISlopedConstructionPlane slope in slopes)
                     result[Tuple.Create(EntityType.SlopedConstructionPlane, slope.Index)] = slope.Plane.ValueOrDefault();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read sloped construction planes from Tekla Structural Designer, so patch and line loads on them cannot be placed. " + e.Message);
             }
 
             return result;

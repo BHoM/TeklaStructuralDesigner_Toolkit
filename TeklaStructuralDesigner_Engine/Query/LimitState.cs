@@ -31,7 +31,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The limit state (Strength or Service) of a LoadCombination pulled from Tekla Structural Designer, read from its TeklaStructuralDesignerCombinationProperties fragment, or from its Number if the fragment has been lost.")]
@@ -56,17 +56,6 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
             Base.Compute.RecordError("LoadCombination '" + combination.Name + "' carries no Tekla Structural Designer combination data and its Number (" + combination.Number +
                 ") is not a Tekla Structural Designer combination number, so its limit state is unknown.");
             return TeklaStructuralDesignerLimitState.Strength;
-        }
-
-        /***************************************************/
-        /****            Private Methods                ****/
-        /***************************************************/
-
-        // The band decoding is CombinationNumber's; this only adds which limit state the band means.
-        private static bool LimitState(int caseNumber, out TeklaStructuralDesignerLimitState limitState)
-        {
-            limitState = caseNumber / NumberBand == ServiceBand ? TeklaStructuralDesignerLimitState.Service : TeklaStructuralDesignerLimitState.Strength;
-            return CombinationNumber(caseNumber) >= 0;
         }
 
         /***************************************************/

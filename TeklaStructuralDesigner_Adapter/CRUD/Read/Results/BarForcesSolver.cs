@@ -38,48 +38,28 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Batched solver bar forces)    ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // One call per requested loading case returns the end forces of every solver element in the
-        // model at once (Analysis3DResults.GetEndForcesAsync with indices = null). On a model with
-        // thousands of spans and dozens of combinations that is the difference between a few dozen
-        // calls and hundreds of thousands, which is why the default route (Auto) tries this first.
-        //
-        // The cost is granularity: results land at solver element boundaries, which can be finer than
-        // a span (a span may be more than one solver element). The solver API exposes no geometry for
-        // its elements, so where a span is more than one element the interior stations are reported at
-        // evenly spaced fractions by element order - exact only where the elements are of equal
-        // length. The two ends are always exact.
+        // One call per case for the end forces of every solver element, far fewer calls than the per
+        // span end route. Spans of several solver elements report their inside stations at evenly
+        // spaced fractions, as the API gives elements no geometry; the ends are always exact.
         private List<BarForce> BarForcesFromSolver(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, bool endsOnly, int timeoutSeconds)
         {
             List<BarForce> results = new List<BarForce>();
 
-            LoadingResultType loadingResultType = config.LoadingResultType.ToTeklaStructuralDesigner();
+            LoadingResultType loadingResultType = config.LoadingResultType.ToTsd();
 
             TSD.API.Remoting.Solver.IModel solverModel = SolverModel(config, timeoutSeconds);
             if (solverModel == null)
                 return results;
 
-            List<IElement1D> elements;
-            try
-            {
-                elements = Async.RunSync(ct => solverModel.GetElements1DAsync(null, ct), timeoutSeconds, "reading solver elements").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read solver elements from Tekla Structural Designer. " + e.Message);
+            IEnumerable<IElement1D> elements;
+            if (!Async.TryRunSync(ct => solverModel.GetElements1DAsync(null, ct), timeoutSeconds, "reading solver elements", "no bar forces have been read", out elements, true))
                 return results;
-            }
 
-            // Group solver elements by the span they belong to; OrderAlongSpans below puts each group in
-            // order from the span's start to its end. A solver element is traced back to its span by the
-            // member's index and the span's index
-            // within it, not by the span's Guid: Tekla Structural Designer 2026 leaves both the span and
-            // the member Guid on SourceSubEntityInfo empty (checked on a live model - 972 of 972 solver
-            // elements had empty Guids, and every one of them had a valid member and span index). Keyed
-            // by Guid, every element was skipped and this route silently returned nothing.
+            // Solver elements are grouped by member and span index, as the span and member Guids on
+            // SourceSubEntityInfo are empty in Tekla Structural Designer 2026.
             Dictionary<Tuple<int, int>, List<IElement1D>> elementsBySpan = new Dictionary<Tuple<int, int>, List<IElement1D>>();
             foreach (IElement1D element in elements)
             {
@@ -118,17 +98,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (TsdLoadingCaseIdentity loadingCase in solvedCases)
             {
                 IEnumerable<IElementEndForces> endForces;
-                try
-                {
-                    endForces = Async.RunSync(
+                if (!Async.TryRunSync(
                         ct => analysis3D.GetEndForcesAsync(loadingCase.Id, loadingResultType, null, ct),
-                        timeoutSeconds, "reading end forces for case '" + loadingCase + "'");
-                }
-                catch (Exception e)
-                {
-                    Engine.Base.Compute.RecordWarning("Failed to read end forces for case '" + loadingCase + "'; it has been skipped. " + e.Message);
+                        timeoutSeconds, "reading end forces for case '" + loadingCase + "'", "it has been skipped", out endForces))
                     continue;
-                }
 
                 Dictionary<int, IElementEndForces> forceByElementIndex = endForces
                     .GroupBy(f => f.ElementIndex)
@@ -138,7 +111,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 {
                     TsdSpanIdentity span;
                     if (!spanByKey.TryGetValue(spanElements.Key, out span))
-                        continue; // Not one of the spans this read is scoped to.
+                        continue;
 
                     AddSpanResults(results, spanElements.Value, forceByElementIndex, span, loadingCase.Number, config.SwapMajorMinorAxes, endsOnly);
                 }
@@ -149,13 +122,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Puts the solver elements of each span in order from the span's start to its end, by how far
-        // along the span the middle of each element lies. Ascending solver Index does not do this:
-        // checked on a live model, a column split into two solver elements had its upper element first,
-        // so its base was reported at mid height and its mid height at both ends. The solver API gives
-        // an element no geometry of its own, but each solver node lists the elements it joins, so an
-        // element's middle is the mean of its nodes. Where the nodes cannot be read, or an element's
-        // cannot be found, a span falls back to solver Index order, with a warning.
+        // Orders each span's solver elements from its start, by where the mean of each element's nodes
+        // lies along the span: solver Index order is not along the span. Falls back to Index order,
+        // with a warning, where the nodes cannot be read.
         private static void OrderAlongSpans(
             TSD.API.Remoting.Solver.IModel solverModel,
             Dictionary<Tuple<int, int>, List<IElement1D>> elementsBySpan,
@@ -168,16 +137,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (!elementsBySpan.Any(kvp => kvp.Value.Count > 1 && spanByKey.ContainsKey(kvp.Key)))
                 return;
 
-            List<INode> nodes;
-            try
-            {
-                nodes = Async.RunSync(ct => solverModel.GetNodesAsync(null, ct), timeoutSeconds, "reading solver nodes").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read solver nodes, so the stations inside spans of more than one solver element are in solver order, which may not run from the start of the span to its end. The two ends of each span are unaffected. " + e.Message);
+            IEnumerable<INode> nodes;
+            if (!Async.TryRunSync(ct => solverModel.GetNodesAsync(null, ct), timeoutSeconds, "reading solver nodes", "the stations inside spans of more than one solver element are in solver order, which may not run from the start of the span to its end. The two ends of each span are unaffected", out nodes))
                 return;
-            }
 
             Dictionary<int, List<Point>> pointsByElement = new Dictionary<int, List<Point>>();
             foreach (INode node in nodes)
@@ -185,7 +147,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 if (node.Element1dIndices == null)
                     continue;
 
-                Point position = node.Coordinates.ToBHoMPoint();
+                Point position = node.Coordinates.FromTsdPoint();
                 foreach (int elementIndex in node.Element1dIndices)
                 {
                     List<Point> points;
@@ -219,17 +181,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // How far along a span, from its start, the middle of a solver element's nodes lies.
+        // How far along a span the mean of a solver element's nodes lies.
         private static double DistanceAlong(List<Point> elementPoints, Point spanStart, Vector along)
         {
-            Point middle = new Point
-            {
-                X = elementPoints.Average(p => p.X),
-                Y = elementPoints.Average(p => p.Y),
-                Z = elementPoints.Average(p => p.Z),
-            };
-
-            return (middle - spanStart).DotProduct(along);
+            return (elementPoints.Average() - spanStart).DotProduct(along);
         }
 
         /***************************************************/
@@ -252,15 +207,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
             {
                 IElementEndForces firstForces, lastForces;
                 if (forceByElementIndex.TryGetValue(spanElements[0].Index, out firstForces))
-                    results.Add(firstForces.StartForce.ToBHoM(span.ObjectId, resultCase, 0.0, 2, true, isVertical, swapMajorMinorAxes));
+                    results.Add(firstForces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, 0.0, 2, true, isVertical, swapMajorMinorAxes));
                 if (forceByElementIndex.TryGetValue(spanElements[spanElements.Count - 1].Index, out lastForces))
-                    results.Add(lastForces.EndForce.ToBHoM(span.ObjectId, resultCase, 1.0, 2, false, isVertical, swapMajorMinorAxes));
+                    results.Add(lastForces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, 2, false, isVertical, swapMajorMinorAxes));
                 return;
             }
 
-            // n solver elements along a span produce n+1 stations: each element's start, plus the last
-            // element's end. Each station inside the span is read as the start of the element after it,
-            // so it is converted as a start force.
+            // n elements give n + 1 stations: each element's start force, and the last one's end force.
             int stationCount = spanElements.Count + 1;
 
             for (int i = 0; i < spanElements.Count; i++)
@@ -270,29 +223,23 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     continue;
 
                 double position = (double)i / (stationCount - 1);
-                results.Add(forces.StartForce.ToBHoM(span.ObjectId, resultCase, position, stationCount, true, isVertical, swapMajorMinorAxes));
+                results.Add(forces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, position, stationCount, true, isVertical, swapMajorMinorAxes));
 
                 if (i == spanElements.Count - 1)
-                    results.Add(forces.EndForce.ToBHoM(span.ObjectId, resultCase, 1.0, stationCount, false, isVertical, swapMajorMinorAxes));
+                    results.Add(forces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, stationCount, false, isVertical, swapMajorMinorAxes));
             }
         }
 
         /***************************************************/
 
-        // Pre-flight validation: names which requested cases have not been solved for this analysis
-        // type, rather than the ported tool's behaviour of throwing a bare exception when none have.
+        // The requested cases that have been solved, naming those that have not.
         private List<TsdLoadingCaseIdentity> SolvedCasesOnly(IAnalysis3DResults analysis3D, List<TsdLoadingCaseIdentity> cases, string analysisTypeDescription, int timeoutSeconds)
         {
-            HashSet<Guid> solvedLoadingIds;
-            try
-            {
-                solvedLoadingIds = new HashSet<Guid>(Async.RunSync(ct => analysis3D.GetSolvedLoadingIdsAsync(ct), timeoutSeconds, "reading solved loading cases"));
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read which loading cases have been solved for " + analysisTypeDescription + "; proceeding without that check. " + e.Message);
+            IEnumerable<Guid> solvedRead;
+            if (!Async.TryRunSync(ct => analysis3D.GetSolvedLoadingIdsAsync(ct), timeoutSeconds, "reading which cases are solved for " + analysisTypeDescription, "they have not been checked", out solvedRead))
                 return cases;
-            }
+
+            HashSet<Guid> solvedLoadingIds = new HashSet<Guid>(solvedRead);
 
             List<TsdLoadingCaseIdentity> solved = new List<TsdLoadingCaseIdentity>();
             List<TsdLoadingCaseIdentity> unsolved = new List<TsdLoadingCaseIdentity>();
@@ -307,9 +254,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             if (unsolved.Count > 0)
             {
-                string names = string.Join(", ", unsolved.Take(10).Select(c => c.ToString()));
-                if (unsolved.Count > 10)
-                    names += ", ...";
+                string names = Helpers.Summary(unsolved.Select(c => c.ToString()));
 
                 Engine.Base.Compute.RecordWarning(unsolved.Count + " requested loading case(s) have not been solved for " +
                     analysisTypeDescription + " and have been skipped: " + names);

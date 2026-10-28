@@ -6,8 +6,8 @@
     <OutputType>Library</OutputType>
     <AssemblyName>TeklaStructuralDesigner_oM</AssemblyName>
     <RootNamespace>BH.oM.Adapters.TeklaStructuralDesigner</RootNamespace>
-    <AssemblyVersion>9.0.0.0</AssemblyVersion>
-    <FileVersion>9.2.0.0</FileVersion>
+    <AssemblyVersion>10.0.0.0</AssemblyVersion>
+    <FileVersion>10.0.0.0</FileVersion>
     <Description>https://github.com/BHoM/TeklaStructuralDesigner_Toolkit</Description>
     <Authors>BHoM</Authors>
     <Copyright>Copyright © https://github.com/BHoM</Copyright>
@@ -15,8 +15,6 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!-- Flat output directory. Without AppendTargetFrameworkToOutputPath the SDK emits
-         ..\Build\Debug\net48\, which BHoM's CI and the installer do not expect. -->
     <OutputPath>..\Build\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
@@ -28,9 +26,7 @@
     <None Remove="obj\**" />
   </ItemGroup>
 
-  <!-- This project deliberately does NOT reference TSD.API.Remoting. BHoM convention is that an
-       _oM assembly never depends on an external software API, which is why the TSD enums that
-       need to appear on a config object are mirrored here rather than re-exported. -->
+  <!-- No reference to the Tekla Structural Designer API: an _oM never depends on external software. -->
   <ItemGroup>
     <Reference Include="Adapter_oM">
       <HintPath>$(ProgramData)\BHoM\Assemblies\Adapter_oM.dll</HintPath>

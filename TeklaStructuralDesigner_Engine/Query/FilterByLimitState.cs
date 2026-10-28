@@ -32,7 +32,7 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
-        /****            Public Methods                 ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Description("The LoadCombinations of one limit state, from a list pulled from Tekla Structural Designer - for example every Service combination, to request deflection results for.")]

@@ -30,7 +30,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerMemberProperties : IFragment
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("Name of the physical member in Tekla Structural Designer, as shown in its interface. A member may contain several spans, each of which becomes a separate BHoM Bar.")]

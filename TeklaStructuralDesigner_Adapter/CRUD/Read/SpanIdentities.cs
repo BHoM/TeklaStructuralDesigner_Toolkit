@@ -28,63 +28,40 @@ using TSD.API.Remoting.Common;
 using TSD.API.Remoting.Materials;
 using TSD.API.Remoting.Sections;
 using TSD.API.Remoting.Structure;
+using TsdPoint3D = TSD.API.Remoting.Geometry.Point3D;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Span identity)                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // Builds one TsdSpanIdentity per span in the whole model, or per span of the members with the
-        // given indices - which is how a pull of the current selection avoids reading every member.
-        // Every member and span is included:
-        // this adapter does not filter by material or construction type, unlike the tool it was ported
-        // from - that kind of filtering is application logic for whatever consumes the pull, not
-        // something the adapter should decide on the caller's behalf.
-        //
-        // Rebuilt on every call rather than cached across Pulls, so a model edited between pulls is
-        // never read against stale identities. The cost is a handful of extra calls (GetMembersAsync,
-        // one GetSpanAsync per member, one GetElementGroupsAsync, one GetLevelsAsync, one
-        // GetConstructionPointsAsync) which is negligible next to the results calls that follow.
+        // One TsdSpanIdentity per span of every member, or of the given members only. Rebuilt on every
+        // call, so a model edited between pulls is never read against stale identities.
         private List<TsdSpanIdentity> BuildSpanIdentities(int timeoutSeconds, ICollection<int> memberIndices = null)
         {
             List<TsdSpanIdentity> result = new List<TsdSpanIdentity>();
 
-            List<IMember> members;
-            try
-            {
-                members = Async.RunSync(ct => m_Model.GetMembersAsync(memberIndices, ct), timeoutSeconds, "reading members").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordError("Failed to read members from Tekla Structural Designer. " + e.Message);
+            IEnumerable<IMember> members;
+            if (!Async.TryRunSync(ct => m_Model.GetMembersAsync(memberIndices, ct), timeoutSeconds, "reading members", "no members have been read", out members, true))
                 return result;
-            }
 
             Dictionary<Guid, ElementGroupInfo> groupLookup = BuildElementGroupLookup(timeoutSeconds);
 
-            // First pass: read every span and note which construction point indices its ends refer to,
-            // without resolving level names yet - that is done once, for the whole set, below.
+            // Read every span first, so the construction points at their ends can be read in one batch.
             List<PendingSpan> pending = new List<PendingSpan>();
             HashSet<int> pointIndices = new HashSet<int>();
             int membersWithNoSpans = 0;
 
             foreach (IMember member in members)
             {
-                List<IMemberSpan> spans;
-                try
-                {
-                    spans = Async.RunSync(ct => member.GetSpanAsync(null, ct), timeoutSeconds, "reading spans for member '" + member.Name + "'").ToList();
-                }
-                catch (Exception e)
-                {
-                    Engine.Base.Compute.RecordWarning("Failed to read spans for member '" + member.Name + "'; it has been skipped. " + e.Message);
+                IEnumerable<IMemberSpan> spansRead;
+                if (!Async.TryRunSync(ct => member.GetSpanAsync(null, ct), timeoutSeconds, "reading spans for member '" + member.Name + "'", "it has been skipped", out spansRead))
                     continue;
-                }
 
+                List<IMemberSpan> spans = spansRead.ToList();
                 if (spans.Count == 0)
                 {
                     membersWithNoSpans++;
@@ -115,8 +92,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             Dictionary<int, ConstructionPointInfo> pointInfoByIndex = BuildConstructionPointInfoByIndex(pointIndices, timeoutSeconds);
 
-            // Second pass: now that construction point positions and levels are resolvable, build the
-            // identities.
             int spansWithNoLevel = 0;
             int spansWithNoGeometry = 0;
 
@@ -141,7 +116,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
                 IMemberSection memberSection = p.Span.ElementSection.ValueOrDefault() as IMemberSection;
                 ISection physicalSection = memberSection != null ? memberSection.PhysicalSection.ValueOrDefault() : null;
-                string sectionName = physicalSection != null ? (physicalSection.LongName ?? physicalSection.ShortName ?? "") : "";
 
                 IMaterial material = p.Span.Material.ValueOrDefault();
                 string materialGrade = material != null ? (material.Name ?? "") : "";
@@ -160,7 +134,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     elementGroupName: groupInfo != null ? groupInfo.Name : "",
                     parentElementGroupName: groupInfo != null ? groupInfo.ParentName : "",
                     materialGrade: materialGrade,
-                    sectionName: sectionName,
+                    sectionName: physicalSection.SectionName(),
                     memberConstruction: p.Construction,
                     startPointId: startInfo?.Id ?? Guid.Empty,
                     endPointId: endInfo?.Id ?? Guid.Empty,
@@ -179,25 +153,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Builds member Id -> (group name, parent group name), from the innermost group containing
-        // each member. GetElementGroupsAsync only returns top level groups, so sub groups are reached
-        // by walking IElementGroup.SubGroups recursively. A member's direct Elements list (not
-        // AllElements, which also includes every sub group's members) is therefore always its most
-        // specific group.
+        // Member Id to its innermost group and that group's parent. Only top level groups are returned
+        // by the API, so sub groups are walked, and each group's direct Elements used.
         private Dictionary<Guid, ElementGroupInfo> BuildElementGroupLookup(int timeoutSeconds)
         {
             Dictionary<Guid, ElementGroupInfo> lookup = new Dictionary<Guid, ElementGroupInfo>();
 
-            List<IElementGroup> topLevelGroups;
-            try
-            {
-                topLevelGroups = Async.RunSync(ct => m_Model.GetElementGroupsAsync(null, EntityType.Member, ct), timeoutSeconds, "reading element groups").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read element groups from Tekla Structural Designer; element group names will be left empty. " + e.Message);
+            IEnumerable<IElementGroup> topLevelGroups;
+            if (!Async.TryRunSync(ct => m_Model.GetElementGroupsAsync(null, EntityType.Member, ct), timeoutSeconds, "reading element groups", "element group names will be left empty", out topLevelGroups))
                 return lookup;
-            }
 
             foreach (IElementGroup group in FlattenGroups(topLevelGroups))
             {
@@ -230,10 +194,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // One GetConstructionPointsAsync call for every point index actually referenced by a span end
-        // in the model, rather than one call per span - the same batching principle as the results
-        // read itself. Returns each point's own Guid (the Node identity a Bar's ends are built from),
-        // its position in metres, and the level name resolved from its construction plane.
+        // The Guid, position and level of every given construction point, in one call.
         private Dictionary<int, ConstructionPointInfo> BuildConstructionPointInfoByIndex(HashSet<int> pointIndices, int timeoutSeconds)
         {
             Dictionary<int, ConstructionPointInfo> result = new Dictionary<int, ConstructionPointInfo>();
@@ -242,21 +203,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             Dictionary<Guid, string> levelNameByPlaneId = BuildLevelNameByPlaneId(timeoutSeconds);
 
-            List<IConstructionPoint> points;
-            try
-            {
-                points = Async.RunSync(ct => m_Model.GetConstructionPointsAsync(pointIndices, ct), timeoutSeconds, "reading construction points").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read construction points from Tekla Structural Designer; Bar geometry and level names will be left empty. " + e.Message);
+            IEnumerable<IConstructionPoint> points;
+            if (!Async.TryRunSync(ct => m_Model.GetConstructionPointsAsync(pointIndices, ct), timeoutSeconds, "reading construction points", "Bar geometry and level names will be left empty", out points))
                 return result;
-            }
 
             foreach (IConstructionPoint point in points)
             {
-                TSD.API.Remoting.Geometry.Point3D coordinates = point.Coordinates.ValueOrDefault(default(TSD.API.Remoting.Geometry.Point3D));
-                Point position = coordinates.ToBHoMPoint();
+                TsdPoint3D coordinates = point.Coordinates.ValueOrDefault(default(TsdPoint3D));
+                Point position = coordinates.FromTsdPoint();
 
                 string levelName = null;
                 EntityInfo planeInfo = point.PlaneInfo.ValueOrDefault(default(EntityInfo));
@@ -283,70 +237,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Every level in the model; empty, with a warning naming the consequence, if the read fails.
+        // Every level in the model, or none, with a warning naming the consequence.
         private List<IHorizontalConstructionPlane> ReadTsdLevels(int timeoutSeconds, string consequence)
         {
-            try
-            {
-                return Async.RunSync(ct => m_Model.GetLevelsAsync(null, ct), timeoutSeconds, "reading levels").ToList();
-            }
-            catch (Exception e)
-            {
-                Engine.Base.Compute.RecordWarning("Failed to read levels from Tekla Structural Designer; " + consequence + ". " + e.Message);
+            IEnumerable<IHorizontalConstructionPlane> levels;
+            if (!Async.TryRunSync(ct => m_Model.GetLevelsAsync(null, ct), timeoutSeconds, "reading levels", consequence, out levels))
                 return new List<IHorizontalConstructionPlane>();
-            }
-        }
 
-        /***************************************************/
-        /****            Private Nested Types           ****/
-        /***************************************************/
-
-        private sealed class PendingSpan
-        {
-            public IMember Member { get; }
-            public IMemberSpan Span { get; }
-            public string Construction { get; }
-            public int StartPointIndex { get; }
-            public int EndPointIndex { get; }
-
-            public PendingSpan(IMember member, IMemberSpan span, string construction, int startPointIndex, int endPointIndex)
-            {
-                Member = member;
-                Span = span;
-                Construction = construction;
-                StartPointIndex = startPointIndex;
-                EndPointIndex = endPointIndex;
-            }
-        }
-
-        /***************************************************/
-
-        private sealed class ElementGroupInfo
-        {
-            public string Name { get; }
-            public string ParentName { get; }
-
-            public ElementGroupInfo(string name, string parentName)
-            {
-                Name = name;
-                ParentName = parentName;
-            }
-        }
-
-        /***************************************************/
-
-        private sealed class ConstructionPointInfo
-        {
-            public Guid Id { get; }
-            public Point Position { get; }
-            public string LevelName { get; }
-
-            public ConstructionPointInfo(Guid id, Point position, string levelName)
-            {
-                Id = id;
-                Position = position;
-                LevelName = levelName;
-            }
+            return levels.ToList();
         }
 
         /***************************************************/

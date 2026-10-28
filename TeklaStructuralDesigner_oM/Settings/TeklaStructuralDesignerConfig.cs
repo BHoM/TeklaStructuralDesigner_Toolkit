@@ -29,7 +29,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerConfig : BHoMObject
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("How long to wait, in seconds, for Tekla Structural Designer to respond to a single API call before giving up. Zero or negative waits indefinitely. The default is generous because a first call against a large model can be slow.")]

@@ -33,12 +33,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // One Bar per span (see BarResults.cs for why span, not member, is the unit), with its section
-        // matched to the BHoM library or built from its shape, and its end Nodes carrying their
-        // supports.
+        // One Bar per span, with its section matched to the BHoM library or built from its shape.
         private List<Bar> ReadBars(IList ids)
         {
             int timeout = TeklaStructuralDesignerConfig.TimeoutSeconds;
@@ -54,8 +52,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // The Bars of the given spans, shared by the read by id above and the read of the current
-        // selection.
+        // Shared by the read by id and the read of the selection.
         private List<Bar> BarsOfSpans(List<TsdSpanIdentity> spans, int timeout)
         {
             Dictionary<Guid, Node> nodeById = NodesByPointId(spans);
@@ -77,9 +74,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (skipped > 0)
                 Engine.Base.Compute.RecordWarning(skipped + " span(s) could not be resolved to Bar geometry because one or both end points were missing, and have been skipped.");
 
-            // Tekla Structural Designer never decomposes slab, roof or wind wall load onto a brace - checked
-            // on a live model, where none of 26 braces carried any - but BHoM has no way to say a Bar is to
-            // be left out of a loading panel's distribution, so the receiving package may load them.
+            // Tekla Structural Designer never loads braces from slabs, roofs or wind walls, but BHoM
+            // cannot exclude a Bar from a loading panel, so the receiving package may.
             int braces = bars.Count(b => b.FindFragment<TeklaStructuralDesignerMemberProperties>()?.MemberConstruction?.EndsWith("Brace") == true);
             if (braces > 0)
             {
@@ -107,7 +103,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return false;
             }
 
-            bar = span.ToBHoM(start, end, cache);
+            bar = span.FromTsdBar(start, end, cache);
             return true;
         }
 

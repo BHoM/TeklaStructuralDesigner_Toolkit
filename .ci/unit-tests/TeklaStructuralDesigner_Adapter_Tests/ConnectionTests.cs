@@ -31,12 +31,11 @@ using Shouldly;
 
 namespace BH.Tests.Adapter.TeklaStructuralDesigner
 {
+    // Headless: these need no Tekla Structural Designer, and run in CI.
     public class ConnectionTests
     {
         /***************************************************/
-        /**** Public Tests - these run without Tekla    ****/
-        /**** Structural Designer being installed or    ****/
-        /**** running, and are exercised by CI.         ****/
+        /**** Public Methods                            ****/
         /***************************************************/
 
         [Test]

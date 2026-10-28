@@ -30,7 +30,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
     public class TeklaStructuralDesignerCombinationProperties : IFragment
     {
         /***************************************************/
-        /****            Public Properties              ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
         [Description("Which limit state this LoadCombination represents: Strength (factors and results Tekla Structural Designer designs with) or Service (factors and results it checks deflection with).")]

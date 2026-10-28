@@ -33,14 +33,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
     public partial class TeklaStructuralDesignerAdapter
     {
         /***************************************************/
-        /****            Private Methods                ****/
-        /****            (Result request filtering)     ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
-        // An empty or null ObjectIds means "every span". Otherwise, each requested item can be the
-        // ObjectId string itself (matching a Bar previously pulled from this adapter), or a Bar object
-        // carrying a TeklaStructuralDesignerId fragment, in which case that fragment's Id is what is
-        // matched against.
+        // Empty ObjectIds means every span; otherwise each is an ObjectId or a pulled Bar.
         private List<TsdSpanIdentity> FilterSpans(List<TsdSpanIdentity> spans, List<object> objectIds)
         {
             if (objectIds == null || objectIds.Count == 0)
@@ -53,7 +49,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (duplicated.Count > 0)
             {
                 Engine.Base.Compute.RecordWarning(duplicated.Count + " span identifier(s) are shared by more than one member, and only the first span of each has been read: " +
-                    string.Join(", ", duplicated.Take(10)) + (duplicated.Count > 10 ? ", ..." : "") + ".");
+                    Helpers.Summary(duplicated) + ".");
             }
 
             List<TsdSpanIdentity> matched = new List<TsdSpanIdentity>();
@@ -70,26 +66,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     unmatched.Add(key ?? requested?.ToString() ?? "<null>");
             }
 
-            if (unmatched.Count > 0)
-            {
-                string message = "Could not match " + unmatched.Count + " of " + objectIds.Count +
-                    " requested object(s) to a span. Accepted forms are the ObjectId string (e.g. 'B12:0') or a Bar previously pulled from this adapter. Unmatched: " +
-                    string.Join(", ", unmatched.Take(10)) + (unmatched.Count > 10 ? ", ..." : "");
-
-                if (matched.Count == 0)
-                    Engine.Base.Compute.RecordError(message);
-                else
-                    Engine.Base.Compute.RecordWarning(message);
-            }
+            ReportUnmatched(unmatched, objectIds.Count, matched.Count, "object(s) to a span", "Accepted forms are the ObjectId string (e.g. 'B12:0') or a Bar previously pulled from this adapter. ");
 
             return matched;
         }
 
         /***************************************************/
 
-        // The Nodes a node result request reads, in the order they are pulled. An empty or null ObjectIds
-        // means every Node. Otherwise each requested item can be the Node's id - the Guid of its
-        // construction point, as a Guid or as text - or a Node previously pulled from this adapter.
+        // Empty ObjectIds means every Node; otherwise each is a Node id (its construction point Guid)
+        // or a pulled Node.
         private List<KeyValuePair<Guid, Node>> FilterNodes(Dictionary<Guid, Node> nodeById, List<object> objectIds)
         {
             if (objectIds == null || objectIds.Count == 0)
@@ -111,25 +96,14 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     matched.Add(new KeyValuePair<Guid, Node>(id, found));
             }
 
-            if (unmatched.Count > 0)
-            {
-                string message = "Could not match " + unmatched.Count + " of " + objectIds.Count +
-                    " requested object(s) to a Node. Accepted forms are the Node's id (the Guid of its construction point) or a Node previously pulled from this adapter. Unmatched: " +
-                    string.Join(", ", unmatched.Take(10)) + (unmatched.Count > 10 ? ", ..." : "");
-
-                if (matched.Count == 0)
-                    Engine.Base.Compute.RecordError(message);
-                else
-                    Engine.Base.Compute.RecordWarning(message);
-            }
+            ReportUnmatched(unmatched, objectIds.Count, matched.Count, "object(s) to a Node", "Accepted forms are the Node's id (the Guid of its construction point) or a Node previously pulled from this adapter. ");
 
             return matched;
         }
 
         /***************************************************/
 
-        // A requested object as the text its identifier is matched on: the text itself, or the
-        // TeklaStructuralDesignerId of an object pulled from this adapter.
+        // The text a requested object is matched on: itself, or its TeklaStructuralDesignerId.
         private static string ObjectKey(object requested)
         {
             if (requested == null)
@@ -152,20 +126,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // Which cases a result request reads.
-        //
-        // With no cases named, the pull configuration decides: the Strength combinations by default,
-        // plus the Service combinations and the loadcases if their Include flags are set.
-        //
-        // Named cases are always read, whatever the flags say, and each can be given as:
-        //  - a Loadcase or LoadCombination pulled from this adapter - matched on the Guid its results
-        //    are read with (TeklaStructuralDesignerId.PersistentId), then on its Number, then its Name;
-        //  - a case number, as a number or as text - 1048 is the Strength and 2048 the Service version
-        //    of Tekla Structural Designer combination 48, and 48 alone is loadcase 48;
-        //  - a case name, exactly as pulled - 'Strength 48 ...', 'Service 48 ...' or a loadcase name;
-        //  - the Guid Tekla Structural Designer uses internally.
-        // Numbers are unique across loadcases, Strength and Service combinations (see Engine
-        // Query.CaseNumber), so no request can land on the wrong limit state or on a loadcase by mistake.
+        // With no cases named, the pull configuration's Include flags decide. Named cases are always
+        // read, and can be a pulled Loadcase or LoadCombination, a case Number (1048 Strength and 2048
+        // Service for combination 48), a Name or a Guid. Numbers are unique across all of them.
         private List<TsdLoadingCaseIdentity> FilterCases(List<TsdLoadingCaseIdentity> cases, List<object> requestedCases, TeklaStructuralDesignerPullConfig config)
         {
             if (requestedCases == null || requestedCases.Count == 0)
@@ -211,17 +174,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     matched.Add(found);
             }
 
-            if (unmatched.Count > 0)
-            {
-                string message = "Could not match " + unmatched.Count + " of " + requestedCases.Count +
-                    " requested loading case(s). Accepted forms are a Loadcase or LoadCombination pulled from this adapter, its Number (1000 + n for Strength and 2000 + n for Service combination n), its Name, or its Guid. Unmatched: " +
-                    string.Join(", ", unmatched.Take(10)) + (unmatched.Count > 10 ? ", ..." : "");
-
-                if (matched.Count == 0)
-                    Engine.Base.Compute.RecordError(message);
-                else
-                    Engine.Base.Compute.RecordWarning(message);
-            }
+            ReportUnmatched(unmatched, requestedCases.Count, matched.Count, "loading case(s)", "Accepted forms are a Loadcase or LoadCombination pulled from this adapter, its Number (1000 + n for Strength and 2000 + n for Service combination n), its Name, or its Guid. ");
 
             return matched;
         }
@@ -256,8 +209,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             ICase asCase = requested as ICase;
             if (asCase != null)
             {
-                // The Guid on the case's own id fragment is the one its results are read with, so it
-                // is the most exact match there is.
+                // The Guid its results are read with is the most exact match.
                 TeklaStructuralDesignerId id = ((BH.oM.Base.IBHoMObject)asCase).FindFragment<TeklaStructuralDesignerId>();
                 if (id != null && id.PersistentId is Guid && byId.TryGetValue((Guid)id.PersistentId, out found))
                     return found;
@@ -281,7 +233,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
-        // A requested case given as a number: any whole number type, or text that is a whole number.
+        // A whole number of any numeric type, or as text.
         private static int? AsCaseNumber(object requested)
         {
             if (requested is int)
@@ -313,6 +265,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return "Loadcase '" + asLoadcase.Name + "'";
 
             return requested.ToString();
+        }
+
+        /***************************************************/
+
+        // Records the requested items that matched nothing: an error if none matched, a warning if some did.
+        private static void ReportUnmatched(List<string> unmatched, int requested, int matched, string what, string acceptedForms)
+        {
+            if (unmatched.Count == 0)
+                return;
+
+            string message = "Could not match " + unmatched.Count + " of " + requested + " requested " + what + ". " + acceptedForms + "Unmatched: " + Helpers.Summary(unmatched);
+
+            if (matched == 0)
+                Engine.Base.Compute.RecordError(message);
+            else
+                Engine.Base.Compute.RecordWarning(message);
         }
 
         /***************************************************/

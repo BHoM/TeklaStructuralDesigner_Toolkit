@@ -25,13 +25,11 @@ using System.Linq;
 
 namespace BH.Adapter.TeklaStructuralDesigner
 {
-    // Centralised message text, mirroring Robot_Adapter/Adapter/ErrorMessages.cs. Kept in one place so
-    // that the wording stays consistent and so that each message can be written to actually help:
-    // every one of these says what went wrong AND what the user should do about it.
+    // Message text in one place, as in Robot_Adapter. Each says what went wrong and what to do.
     internal static class ErrorMessages
     {
         /***************************************************/
-        /****            Connection                     ****/
+        /**** Public Methods - Connection               ****/
         /***************************************************/
 
         internal static string NotConnected()
@@ -99,7 +97,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Results                        ****/
+        /**** Public Methods - Results                  ****/
         /***************************************************/
 
         internal static string NoRequest()
@@ -153,7 +151,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
-        /****            Private Methods                ****/
+        /**** Private Methods                           ****/
         /***************************************************/
 
         private static string Bullets(IEnumerable<string> items)
