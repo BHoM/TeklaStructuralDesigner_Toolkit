@@ -66,8 +66,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // release drops Mx and an axial release drops Fx. So Fx..Mz map one to one onto
         // TranslationX..RotationZ.
         //
-        // Local axes: x along the span, with bending about y the major axis - the same correspondence as
-        // Convert/ToBHoM/BarForce.cs (TSD My -> BHoM MY) and Section.cs (major second moment -> Iy).
+        // Local axes: x along the span, with bending about y the major axis, as Section.cs (major second
+        // moment -> Iy). The My and Mz flags are mapped onto RotationY and RotationZ as named. Bar forces
+        // showed that Tekla Structural Designer names a moment after the shear it goes with - its Mz is
+        // the moment about local y - so these two flags may be transposed in the same way; see
+        // Convert/ToBHoM/BarForce.cs. That has not been checked, because it only matters for an end
+        // released about one bending axis and not the other: pinned and fixed ends release or keep both,
+        // and the stiffnesses refined below are named major and minor explicitly.
         //
         // The named properties (axial/torsional release, major/minor rotational stiffness) are only
         // needed where the flags are not reported, and to turn a released rotation into a spring where

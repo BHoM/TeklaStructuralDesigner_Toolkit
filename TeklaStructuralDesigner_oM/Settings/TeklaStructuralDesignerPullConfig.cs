@@ -50,7 +50,7 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("If true, results are read for every individual loadcase when a result request names no cases. False by default: on a real model this multiplies the number of results returned without usually being what was wanted. Cases named on the request are always read, whatever this is set to.")]
         public virtual bool IncludeLoadcases { get; set; } = false;
 
-        [Description("Swaps the major and minor local axes when converting forces, so that the moment Tekla Structural Designer reports about one local axis is written to the other. Only set this true if a known model demonstrates that the default mapping is transposed; see the toolkit README. Shears are swapped together with moments, because a genuine axis transposition affects both.")]
+        [Description("Swaps the major and minor results of pulled bar forces: MY with MZ, and FZ with FY. The default mapping already puts Tekla Structural Designer's major axis moment in MY and its major axis shear in FZ, as BHoM's sign convention has it, so leave this false unless a known model demonstrates otherwise; see the toolkit README.")]
         public virtual bool SwapMajorMinorAxes { get; set; } = false;
 
         [Description("If true, loads that Tekla Structural Designer generated rather than a user applied - decomposed slab and wind loads, solver loads, loads arriving from an incoming element - are pulled alongside the applied loads. False by default: a decomposed load is the same loading already described by the slab load it came from, so pulling both double counts it. Set this true when you want what actually acts on the members rather than what was drawn.")]

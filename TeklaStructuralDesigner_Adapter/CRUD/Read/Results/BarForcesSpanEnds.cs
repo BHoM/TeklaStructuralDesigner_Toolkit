@@ -74,7 +74,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         }
                         else if (force != null)
                         {
-                            results.Add(force.ToBHoM(span.ObjectId, loadingCase.Number, end, 2, config.SwapMajorMinorAxes));
+                            results.Add(force.ToBHoM(span.ObjectId, loadingCase.Number, end, 2, end == 0, span.IsVertical(), config.SwapMajorMinorAxes));
                         }
                     }
                 }

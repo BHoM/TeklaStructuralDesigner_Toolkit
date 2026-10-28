@@ -181,7 +181,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (spanEndForce == null)
                 return true;
 
-            BarForce reference = spanEndForce.ToBHoM(checkSpan.ObjectId, checkCase.Number, 0.0, 2, config.SwapMajorMinorAxes);
+            BarForce reference = spanEndForce.ToBHoM(checkSpan.ObjectId, checkCase.Number, 0.0, 2, true, checkSpan.IsVertical(), config.SwapMajorMinorAxes);
 
             const double tolerance = 1.0; // 1 N / 1 N.m: a sanity check on route agreement, not a precision comparison.
             return Close(solverStart.FX, reference.FX, tolerance) && Close(solverStart.FY, reference.FY, tolerance) &&

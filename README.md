@@ -91,6 +91,14 @@ the user.
   different, coincident construction points (half the supports on the test model, including the raker
   bases). Matching by construction point alone left the Bar's end Node free, and the support was then
   lost the moment the model reached a package that merges coincident nodes, such as Robot.
+- **Braces are not excluded from loading panel distribution.** Tekla Structural Designer never
+  distributes slab, roof or wind wall load onto a brace: on the model this was checked against, none
+  of 26 braces carried any. BHoM has no way to say a Bar is to be left out of a loading panel's
+  distribution, so braces are pulled as ordinary Bars, and a package that distributes loading panel
+  load - Robot, through its claddings - may load braces lying in a loading panel's plane. Every pull
+  that includes braces warns about this; exclude them from cladding load distribution in the
+  receiving model. A brace can be recognised by the `MemberConstruction` on its
+  `TeklaStructuralDesignerMemberProperties` fragment, which ends in `Brace`.
 - **Fragments.** Every pulled object carries a `TeklaStructuralDesignerId`, whose `Id` is the
   readable identifier used in requests and results, and whose `PersistentId` is Tekla Structural
   Designer's own Guid for the object. Bars also carry `TeklaStructuralDesignerMemberProperties`.
@@ -315,17 +323,31 @@ API package versions does not leave stale assemblies behind for the resolver to 
 Note that Rhino, Excel and any other host that has loaded the toolkit will hold a file lock on these
 assemblies. **Close them before rebuilding**, or the post-build copy fails with `MSB3021`.
 
-### A note on axis convention
-`TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` exists because the mapping from Tekla Structural
-Designer's local `y`/`z` axes onto BHoM's major/minor axis convention has not been confirmed against a
-live, solved model. The API does not document which local axis is major. The default (`false`) is
-BHoM's own stated convention (`MY` major axis bending, `MZ` minor axis bending), which the column check
-under [Member orientation](#member-orientation) and the section orientation both point to. One tester,
-on Tekla Structural Designer 2024 against the 2026 API, found `MZ` matching the major axis moment of a
-beam instead. The `GravityBendingIsMajorAxis` test settles it: run it on an analysed model with a
-gravity loaded beam. If it shows the mapping is transposed, set this `true`, and change the default,
-together with the release mapping in `Convert/ToBHoM/BarRelease.cs` and local member load directions in
-`Convert/ToBHoM/Load.cs`, which rest on the same assumption.
+### Bar force sign convention
+Pulled `BarForce`s follow [BHoM's structural sign convention](https://bhom.xyz/documentation/BHoM_oM/Structure_oM/BHoM-Structural-Conventions/#major-axis-bending-moment-my-and-shear-force-fz):
+section forces on the positive face of a cut, positive along the Bar's local axes, moments by the
+right hand rule. So tension is positive, `MY` is major axis bending and `MZ` minor, and under gravity a
+beam's `MY` is negative sagging and positive hogging, with `FZ` negative at the start of a span and
+positive at its end.
+
+Tekla Structural Designer reports something different, and three conversions bridge it - all measured
+on a live Tekla Structural Designer 2026 SP1 model:
+
+| Tekla Structural Designer reports | Converted to BHoM by |
+| --- | --- |
+| End forces: the force each node applies to the element (a column in compression is + at its base and - at its top) | Reversing the force at the start of an element and keeping it at the end |
+| Moments named after their shear: `Mz` pairs with `Fz` and is the moment about local y, the major axis moment | `Mz` to `MY` and `My` to `MZ` |
+| On a non-vertical member, local z pointing down | Reversing every y and z component (vertical members already share BHoM's axes, with the quarter turn under [Member orientation](#member-orientation)) |
+
+Checked on a fixed ended beam under self weight - `FZ` -6.70 kN at the start and +6.39 kN at the end,
+`MY` +12.55 and +11.06 kNm, hogging - and on the axial force and support reactions of columns. Sloped
+and rotated members are taken to follow the same rule as horizontal ones, which has not been measured.
+
+`TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` swaps the major and minor results (`MY` with
+`MZ`, `FZ` with `FY`) after all this, as an escape hatch for a model that demonstrates otherwise; leave
+it `false`. Two other places may share the naming of moments and have not been checked: the `My`/`Mz`
+release flags in `Convert/ToBHoM/BarRelease.cs`, which only matter for an end released about one
+bending axis, and local member load directions in `Convert/ToBHoM/Load.cs`.
 
 ### Member orientation
 A Bar's `OrientationAngle` comes from Tekla Structural Designer's `GlobalRotationAngle`, which is

@@ -121,9 +121,12 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
             BarForce start = results[0];
             BarForce end = results[1];
 
-            // Major axis shear should be equal and opposite at the two ends; major axis moment should
-            // be zero at both pinned ends.
+            // Major axis shear should be equal and opposite at the two ends - negative at the start and
+            // positive at the end under gravity, as BHoM's sign convention has it; major axis moment
+            // should be zero at both pinned ends.
             (start.FZ + end.FZ).ShouldBe(0, 1.0);
+            start.FZ.ShouldBeLessThan(0, "under gravity, BHoM's major axis shear is negative at the start of a span");
+            end.FZ.ShouldBeGreaterThan(0, "under gravity, BHoM's major axis shear is positive at the end of a span");
             start.MY.ShouldBe(0, 1.0);
             end.MY.ShouldBe(0, 1.0);
         }
@@ -131,7 +134,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
-        [Description("Gravity load on a horizontal beam must come back as major axis shear (FZ), not minor (FY). SimplySupportedBeamShearAndMomentAreSymmetric cannot tell the two apart - with the axes transposed its FZ and MY are both near zero and it still passes - so this is the test that settles the axis mapping. If it fails with FY carrying the shear, set SwapMajorMinorAxes and change the default.")]
+        [Description("Gravity load on a horizontal beam must come back as major axis shear (FZ), not minor (FY). Guards the axis mapping in Convert/ToBHoM/BarForce.cs: if it fails with FY carrying the shear, the major and minor axes have been transposed.")]
         public void GravityBendingIsMajorAxis()
         {
             // Same placeholder member and combination as SimplySupportedBeamShearAndMomentAreSymmetric.

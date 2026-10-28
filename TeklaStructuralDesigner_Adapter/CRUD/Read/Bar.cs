@@ -24,6 +24,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using BH.Engine.Base;
+using BH.oM.Adapters.TeklaStructuralDesigner;
 using BH.oM.Structure.Elements;
 
 namespace BH.Adapter.TeklaStructuralDesigner
@@ -74,6 +76,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             if (skipped > 0)
                 Engine.Base.Compute.RecordWarning(skipped + " span(s) could not be resolved to Bar geometry because one or both end points were missing, and have been skipped.");
+
+            // Tekla Structural Designer never decomposes slab, roof or wind wall load onto a brace - checked
+            // on a live model, where none of 26 braces carried any - but BHoM has no way to say a Bar is to
+            // be left out of a loading panel's distribution, so the receiving package may load them.
+            int braces = bars.Count(b => b.FindFragment<TeklaStructuralDesignerMemberProperties>()?.MemberConstruction?.EndsWith("Brace") == true);
+            if (braces > 0)
+            {
+                Engine.Base.Compute.RecordWarning(braces + " Bar(s) are braces. Tekla Structural Designer leaves braces out of the distribution of slab, roof and wind wall load, " +
+                    "but BHoM does not support excluding a Bar from load distribution, so a package that distributes loading panel load, such as Robot through its claddings, may load braces lying in a loading panel's plane. " +
+                    "Check the braces in the receiving model, and exclude them from cladding load distribution there.");
+            }
 
             cache.Report();
 
