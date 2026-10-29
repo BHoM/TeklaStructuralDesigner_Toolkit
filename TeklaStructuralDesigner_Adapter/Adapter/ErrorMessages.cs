@@ -133,7 +133,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         internal static string DivisionsIgnoredBySpanEnds(int divisions)
         {
-            return "Divisions is set to " + divisions + ", but BarForceSource is SpanEnds, which reads the end forces of each bar only. Only the two end forces of each bar have been returned.";
+            return "Divisions is set to " + divisions + ", but the per span end route reads the end forces of each bar only. Only the two end forces of each bar have been returned.";
         }
 
         /***************************************************/

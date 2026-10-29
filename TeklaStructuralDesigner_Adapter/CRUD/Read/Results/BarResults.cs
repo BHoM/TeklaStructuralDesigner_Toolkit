@@ -41,6 +41,18 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         public IEnumerable<IResult> ReadResults(BarResultRequest request, ActionConfig actionConfig = null)
         {
+            return ReadBarForces(request, actionConfig, false);
+        }
+
+        /***************************************************/
+        /**** Internal Methods                          ****/
+        /***************************************************/
+
+        // Bar forces through the batched solver route, spot checked against the per span end route
+        // (see BarForcesCheckedAgainstSpanEnds). spanEndsOnly reads every force through the per span
+        // end route instead; it exists for the live test that compares the two, not for users.
+        internal IEnumerable<IResult> ReadBarForces(BarResultRequest request, ActionConfig actionConfig, bool spanEndsOnly)
+        {
             if (m_Model == null)
             {
                 Engine.Base.Compute.RecordWarning(ErrorMessages.NotConnected());
@@ -97,25 +109,15 @@ namespace BH.Adapter.TeklaStructuralDesigner
             bool endsOnly = request.Divisions <= 2;
             if (!endsOnly)
             {
-                if (config.BarForceSource == TeklaStructuralDesignerBarForceSource.SpanEnds)
+                if (spanEndsOnly)
                     Engine.Base.Compute.RecordWarning(ErrorMessages.DivisionsIgnoredBySpanEnds(request.Divisions));
                 else
                     Engine.Base.Compute.RecordWarning(ErrorMessages.DivisionsNotEvenlyDistributed(request.Divisions));
             }
 
-            List<BarForce> results;
-            switch (config.BarForceSource)
-            {
-                case TeklaStructuralDesignerBarForceSource.SpanEnds:
-                    results = BarForcesFromSpanEnds(spans, cases, config, timeoutSeconds);
-                    break;
-                case TeklaStructuralDesignerBarForceSource.Solver:
-                    results = BarForcesFromSolver(spans, cases, config, endsOnly, timeoutSeconds);
-                    break;
-                default:
-                    results = BarForcesAuto(spans, cases, config, endsOnly, timeoutSeconds);
-                    break;
-            }
+            List<BarForce> results = spanEndsOnly
+                ? BarForcesFromSpanEnds(spans, cases, config, timeoutSeconds)
+                : BarForcesCheckedAgainstSpanEnds(spans, cases, config, endsOnly, timeoutSeconds);
 
             if (results.Count == 0)
             {
@@ -132,7 +134,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         // The batched solver route, spot checked against one span end force from the per span end
         // route; if they disagree, the per span end route is used for the whole pull.
-        private List<BarForce> BarForcesAuto(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, bool endsOnly, int timeoutSeconds)
+        private List<BarForce> BarForcesCheckedAgainstSpanEnds(List<TsdSpanIdentity> spans, List<TsdLoadingCaseIdentity> cases, TeklaStructuralDesignerPullConfig config, bool endsOnly, int timeoutSeconds)
         {
             List<BarForce> solverResults = BarForcesFromSolver(spans, cases, config, endsOnly, timeoutSeconds);
 
@@ -177,7 +179,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (spanEndForce == null)
                 return true;
 
-            BarForce reference = spanEndForce.FromTsdBarForce(checkSpan.ObjectId, checkCase.Number, 0.0, 2, true, checkSpan.IsVertical(), config.SwapMajorMinorAxes);
+            BarForce reference = spanEndForce.FromTsdBarForce(checkSpan.ObjectId, checkCase.Number, 0.0, 2, true, checkSpan.IsVertical());
 
             const double tolerance = 1.0;       // N, N.m: a sanity check, not a precision comparison.
             return Close(solverStart.FX, reference.FX, tolerance) && Close(solverStart.FY, reference.FY, tolerance) &&

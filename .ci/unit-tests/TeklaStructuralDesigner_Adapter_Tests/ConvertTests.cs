@@ -56,7 +56,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         [Test]
         public void BarForceAtTheStartOfABeamIsReversedAndTurned()
         {
-            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 0, 2, true, false, false);
+            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 0, 2, true, false);
 
             force.FX.ShouldBe(-10, 1e-9);
             force.FY.ShouldBe(1, 1e-9);
@@ -71,7 +71,7 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         [Test]
         public void BarForceAtTheEndOfABeamIsTurnedOnly()
         {
-            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 1, 2, false, false, false);
+            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 1, 2, false, false);
 
             force.FX.ShouldBe(10, 1e-9);
             force.FY.ShouldBe(-1, 1e-9);
@@ -86,28 +86,12 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         [Test]
         public void BarForceOnAColumnIsNotTurned()
         {
-            BarForce force = m_Force.FromTsdBarForce("C1:0", 1048, 0, 2, true, true, false);
+            BarForce force = m_Force.FromTsdBarForce("C1:0", 1048, 0, 2, true, true);
 
             force.FY.ShouldBe(-1, 1e-9);
             force.FZ.ShouldBe(-2, 1e-9);
             force.MY.ShouldBe(-3, 1e-9);
             force.MZ.ShouldBe(-2, 1e-9);
-        }
-
-        /***************************************************/
-
-        [Test]
-        public void SwapMajorMinorAxesSwapsYAndZ()
-        {
-            BarForce normal = m_Force.FromTsdBarForce("B1:0", 1048, 0, 2, true, false, false);
-            BarForce swapped = m_Force.FromTsdBarForce("B1:0", 1048, 0, 2, true, false, true);
-
-            swapped.FY.ShouldBe(normal.FZ);
-            swapped.FZ.ShouldBe(normal.FY);
-            swapped.MY.ShouldBe(normal.MZ);
-            swapped.MZ.ShouldBe(normal.MY);
-            swapped.ObjectId.ShouldBe("B1:0");
-            swapped.ResultCase.ShouldBe(1048);
         }
 
         /***************************************************/

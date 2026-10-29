@@ -354,8 +354,9 @@ them, so a `BarResultRequest`'s `Divisions` cannot be honoured as evenly spaced 
   forces only**, so the midspan moment of a simply supported beam is not among them.
 - **Positions are spaced evenly by node order, not measured**: the second of three results is at 0.5
   even when the node it came from is not at midspan.
-- `BarForceSource.SpanEnds` always returns end forces only, whatever `Divisions` says, and so does
-  `Auto` when it falls back to that route.
+- Bar forces are read through the batched solver route, spot checked against one span end force
+  read directly from the span. If the two disagree, the pull falls back to reading every span end
+  directly, which returns end forces only, whatever `Divisions` says, with a warning.
 
 ### Bar force sign convention
 Pulled `BarForce`s follow [BHoM's structural sign convention](https://bhom.xyz/documentation/BHoM_oM/Structure_oM/BHoM-Structural-Conventions/#major-axis-bending-moment-my-and-shear-force-fz):
@@ -377,9 +378,8 @@ Checked on a fixed ended beam under self weight - `FZ` -6.70 kN at the start and
 `MY` +12.55 and +11.06 kNm, hogging - and on the axial force and support reactions of columns. Sloped
 and rotated members are taken to follow the same rule as horizontal ones, which has not been measured.
 
-`TeklaStructuralDesignerPullConfig.SwapMajorMinorAxes` swaps the major and minor results (`MY` with
-`MZ`, `FZ` with `FY`) after all this, as an escape hatch for a model that demonstrates otherwise; leave
-it `false`. Two other places may share the naming of moments and have not been checked: the `My`/`Mz`
+This mapping is fixed in `Convert/FromTsd/Results/BarForce.cs`, as the other structural toolkits fix
+theirs, and is not a pull setting. Two other places may share the naming of moments and have not been checked: the `My`/`Mz`
 release flags in `Convert/FromTsd/Properties/BarRelease.cs`, which only matter for an end released about one
 bending axis, and local member load directions in `Convert/FromTsd/Loads/Load.cs`.
 

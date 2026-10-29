@@ -186,14 +186,14 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
-        [Description("The Auto and SpanEnds force sources must agree, within a generous tolerance, for the same span and case - if they do not, the batched solver route's assumptions (element ordering, axis mapping) are wrong for this model and SwapMajorMinorAxes or BarForceSource needs attention.")]
+        [Description("The batched solver route users get and the per span end route it is checked against must agree, within a generous tolerance, for the same span and case - if they do not, the solver route's assumptions (element ordering, axis mapping) are wrong for this model.")]
         public void SolverAndSpanEndRoutesAgree()
         {
             string memberObjectId = "B1:0";
             string combinationName = "1";
 
-            // BarForceSource lives on the ActionConfig, not the request, so a fresh request is built
-            // per call only because ObjectIds/Cases are mutable lists best not shared between calls.
+            // A fresh request per call only because ObjectIds/Cases are mutable lists best not shared
+            // between calls.
             BarResultRequest NewRequest() => new BarResultRequest
             {
                 ResultType = BarResultType.BarForce,
@@ -202,11 +202,8 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
                 Divisions = 2,
             };
 
-            var solverConfig = new TeklaStructuralDesignerPullConfig { BarForceSource = TeklaStructuralDesignerBarForceSource.Solver };
-            var spanEndConfig = new TeklaStructuralDesignerPullConfig { BarForceSource = TeklaStructuralDesignerBarForceSource.SpanEnds };
-
-            var solverResult = m_Adapter.ReadResults(NewRequest(), solverConfig).Cast<BarForce>().First(r => r.Position < 0.5);
-            var spanEndResult = m_Adapter.ReadResults(NewRequest(), spanEndConfig).Cast<BarForce>().First(r => r.Position < 0.5);
+            var solverResult = m_Adapter.ReadBarForces(NewRequest(), null, false).Cast<BarForce>().First(r => r.Position < 0.5);
+            var spanEndResult = m_Adapter.ReadBarForces(NewRequest(), null, true).Cast<BarForce>().First(r => r.Position < 0.5);
 
             solverResult.FX.ShouldBe(spanEndResult.FX, 1.0);
             solverResult.FY.ShouldBe(spanEndResult.FY, 1.0);

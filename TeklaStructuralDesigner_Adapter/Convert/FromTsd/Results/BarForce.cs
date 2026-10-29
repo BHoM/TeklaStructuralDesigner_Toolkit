@@ -37,7 +37,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         //  - Its local y and z are BHoM's turned half way round x on non-vertical members, so their
         //    components change sign. isVertical must come from Helpers.IsVertical, which matches the
         //    quarter turn Bar orientation gives vertical members.
-        public static BarForce FromTsdBarForce(this IForce3DLocal force, string objectId, int resultCase, double position, int divisions, bool isStart, bool isVertical, bool swapMajorMinorAxes)
+        public static BarForce FromTsdBarForce(this IForce3DLocal force, string objectId, int resultCase, double position, int divisions, bool isStart, bool isVertical)
         {
             double end = isStart ? -1.0 : 1.0;
             double frame = isVertical ? 1.0 : -1.0;
@@ -48,9 +48,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
             double mx = end * force.Mx * MomentScale;
             double my = end * frame * force.Mz * MomentScale;
             double mz = end * frame * force.My * MomentScale;
-
-            if (swapMajorMinorAxes)
-                return new BarForce(objectId, resultCase, -1, 0.0, position, divisions, fx, fz, fy, mx, mz, my);
 
             return new BarForce(objectId, resultCase, -1, 0.0, position, divisions, fx, fy, fz, mx, my, mz);
         }

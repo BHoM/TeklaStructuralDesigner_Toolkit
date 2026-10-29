@@ -113,7 +113,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     if (!spanByKey.TryGetValue(spanElements.Key, out span))
                         continue;
 
-                    AddSpanResults(results, spanElements.Value, forceByElementIndex, span, loadingCase.Number, config.SwapMajorMinorAxes, endsOnly);
+                    AddSpanResults(results, spanElements.Value, forceByElementIndex, span, loadingCase.Number, endsOnly);
                 }
             }
 
@@ -195,7 +195,6 @@ namespace BH.Adapter.TeklaStructuralDesigner
             Dictionary<int, IElementEndForces> forceByElementIndex,
             TsdSpanIdentity span,
             int resultCase,
-            bool swapMajorMinorAxes,
             bool endsOnly)
         {
             if (spanElements.Count == 0)
@@ -207,9 +206,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
             {
                 IElementEndForces firstForces, lastForces;
                 if (forceByElementIndex.TryGetValue(spanElements[0].Index, out firstForces))
-                    results.Add(firstForces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, 0.0, 2, true, isVertical, swapMajorMinorAxes));
+                    results.Add(firstForces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, 0.0, 2, true, isVertical));
                 if (forceByElementIndex.TryGetValue(spanElements[spanElements.Count - 1].Index, out lastForces))
-                    results.Add(lastForces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, 2, false, isVertical, swapMajorMinorAxes));
+                    results.Add(lastForces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, 2, false, isVertical));
                 return;
             }
 
@@ -223,10 +222,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     continue;
 
                 double position = (double)i / (stationCount - 1);
-                results.Add(forces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, position, stationCount, true, isVertical, swapMajorMinorAxes));
+                results.Add(forces.StartForce.FromTsdBarForce(span.ObjectId, resultCase, position, stationCount, true, isVertical));
 
                 if (i == spanElements.Count - 1)
-                    results.Add(forces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, stationCount, false, isVertical, swapMajorMinorAxes));
+                    results.Add(forces.EndForce.FromTsdBarForce(span.ObjectId, resultCase, 1.0, stationCount, false, isVertical));
             }
         }
 

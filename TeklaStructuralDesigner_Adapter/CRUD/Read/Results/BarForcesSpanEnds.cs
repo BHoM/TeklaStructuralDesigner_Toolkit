@@ -48,7 +48,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (callCount > 20000)
             {
                 Engine.Base.Compute.RecordWarning("The per span end route requires " + callCount +
-                    " individual calls to Tekla Structural Designer for this request, which will be slow. Consider TeklaStructuralDesignerBarForceSource.Solver or Auto instead.");
+                    " individual calls to Tekla Structural Designer for this request, which will be slow. Request fewer bars or cases to speed it up.");
             }
 
             int failures = 0;
@@ -70,7 +70,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                         }
                         else if (force != null)
                         {
-                            results.Add(force.FromTsdBarForce(span.ObjectId, loadingCase.Number, end, 2, end == 0, span.IsVertical(), config.SwapMajorMinorAxes));
+                            results.Add(force.FromTsdBarForce(span.ObjectId, loadingCase.Number, end, 2, end == 0, span.IsVertical()));
                         }
                     }
                 }
