@@ -97,8 +97,9 @@ the user.
   distribution, so braces are pulled as ordinary Bars, and a package that distributes loading panel
   load - Robot, through its claddings - may load braces lying in a loading panel's plane. Every pull
   that includes braces warns about this; exclude them from cladding load distribution in the
-  receiving model. A brace can be recognised by the `MemberConstruction` on its
-  `TeklaStructuralDesignerMemberProperties` fragment, which ends in `Brace`.
+  receiving model. A brace can be recognised by the `StructuralUsage` on its
+  `TeklaStructuralDesignerMemberProperties` fragment, which is `Brace`. Ties and truss internal
+  members are classed as braces too; truss chords, purlins and rails as beams; posts as columns.
 - **Fragments.** Every pulled object carries a `TeklaStructuralDesignerId`, whose `Id` is the
   readable identifier used in requests and results, and whose `PersistentId` is Tekla Structural
   Designer's own Guid for the object. Bars also carry `TeklaStructuralDesignerMemberProperties`.
@@ -129,7 +130,7 @@ Pulling `Panel` returns every 2D element in the model. Each carries a `TeklaStru
   converter throws a null reference on any other type, and ETABS creates nothing for it. Composite
   slabs are named after their deck and precast slabs after their plank and topping (a 150mm plank
   with a 75mm structural topping is a 225mm slab), and the slab type is on the fragment's
-  `ElementSubType`. Set `DetailedSurfaceProperties` on the pull configuration to get the nearest
+  `SlabType`. Set `DetailedSurfaceProperties` on the pull configuration to get the nearest
   BHoM type instead: `SlabOnDeck` built from the deck profile for composite slabs, and a `HollowCore`
   or `ConstantThickness` plank wrapped in a `ToppedSlab` where the topping is structural for precast
   slabs. Ribbed and waffle slabs are always solid slabs of their overall depth, because the API does

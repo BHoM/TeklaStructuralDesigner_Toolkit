@@ -33,8 +33,8 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         /**** Public Properties                         ****/
         /***************************************************/
 
-        [Description("The kind of Tekla Structural Designer element the Panel was pulled from: 'SlabItem', 'StructuralWall', 'Roof' or 'WindWall'.")]
-        public virtual string ElementType { get; set; } = "";
+        [Description("The kind of Tekla Structural Designer element the Panel was pulled from: a slab item, a structural wall panel, a roof or a wind wall.")]
+        public virtual TeklaStructuralDesignerPanelElementType ElementType { get; set; } = TeklaStructuralDesignerPanelElementType.Undefined;
 
         [Description("Name of the element in Tekla Structural Designer, as shown in its interface. For a wall this is the name of the whole wall; each of its panels becomes a separate BHoM Panel.")]
         public virtual string ElementName { get; set; } = "";
@@ -54,11 +54,17 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("Index of the slab a slab item belongs to in Tekla Structural Designer. Negative for every other element.")]
         public virtual int SlabIndex { get; set; } = -1;
 
-        [Description("The Tekla Structural Designer type of the element, for example 'Flat' or 'Composite' for a slab, 'MeshedShearWall' for a wall, 'DuoPitch' for a roof.")]
-        public virtual string ElementSubType { get; set; } = "";
+        [Description("The Tekla Structural Designer slab type, for a Panel pulled from a slab item. Undefined for every other element.")]
+        public virtual TeklaStructuralDesignerSlabType SlabType { get; set; } = TeklaStructuralDesignerSlabType.Undefined;
 
-        [Description("How the element spans in Tekla Structural Designer: 'OneWay' or 'TwoWay'. Where it spans one way, it spans along the local x of the Panel.")]
-        public virtual string SpanType { get; set; } = "";
+        [Description("The Tekla Structural Designer wall type, for a Panel pulled from a structural wall. Undefined for every other element.")]
+        public virtual TeklaStructuralDesignerWallType WallType { get; set; } = TeklaStructuralDesignerWallType.Undefined;
+
+        [Description("The Tekla Structural Designer roof type, for a Panel pulled from a roof. Undefined for every other element.")]
+        public virtual TeklaStructuralDesignerRoofType RoofType { get; set; } = TeklaStructuralDesignerRoofType.Undefined;
+
+        [Description("How the element spans in Tekla Structural Designer: one way or two way. Where it spans one way, it spans along the local x of the Panel. Undefined for walls, and for slabs whose span Tekla Structural Designer did not report.")]
+        public virtual TeklaStructuralDesignerSpanType SpanType { get; set; } = TeklaStructuralDesignerSpanType.Undefined;
 
         [Description("Name of the element group the element belongs to in Tekla Structural Designer.")]
         public virtual string ElementGroupName { get; set; } = "";

@@ -35,7 +35,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         public IMemberSpan Span { get; }
 
-        public string Construction { get; }
+        public MemberConstruction Construction { get; }
 
         public int StartPointIndex { get; }
 
@@ -45,7 +45,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /**** Constructors                              ****/
         /***************************************************/
 
-        public PendingSpan(IMember member, IMemberSpan span, string construction, int startPointIndex, int endPointIndex)
+        public PendingSpan(IMember member, IMemberSpan span, MemberConstruction construction, int startPointIndex, int endPointIndex)
         {
             Member = member;
             Span = span;

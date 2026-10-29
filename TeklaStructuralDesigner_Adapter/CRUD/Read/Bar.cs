@@ -76,7 +76,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             // Tekla Structural Designer never loads braces from slabs, roofs or wind walls, but BHoM
             // cannot exclude a Bar from a loading panel, so the receiving package may.
-            int braces = bars.Count(b => b.FindFragment<TeklaStructuralDesignerMemberProperties>()?.MemberConstruction?.EndsWith("Brace") == true);
+            int braces = bars.Count(b => b.FindFragment<TeklaStructuralDesignerMemberProperties>()?.StructuralUsage == StructuralUsage1D.Brace);
             if (braces > 0)
             {
                 Engine.Base.Compute.RecordWarning(braces + " Bar(s) are braces. Tekla Structural Designer leaves braces out of the distribution of slab, roof and wind wall load, " +

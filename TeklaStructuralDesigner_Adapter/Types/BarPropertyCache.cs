@@ -57,10 +57,20 @@ namespace BH.Adapter.TeklaStructuralDesigner
         private readonly HashSet<string> m_FromProfile = new HashSet<string>();
         private readonly HashSet<string> m_HolesIgnored = new HashSet<string>();
         private readonly Dictionary<string, HashSet<string>> m_Explicit = new Dictionary<string, HashSet<string>>();
+        private readonly WarningTally m_Unrecognised = new WarningTally();
 
         /***************************************************/
         /**** Public Methods                            ****/
         /***************************************************/
+
+        // Counts a value Convert did not recognise, so it is reported once with its count.
+        public void Unrecognised(string message)
+        {
+            m_Unrecognised.Add(message);
+        }
+
+        /***************************************************/
+
 
         // The matching BHoM library material if there is one, otherwise the model's own.
         public IMaterialFragment Material(IMaterial material)
@@ -185,6 +195,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             foreach (string rejection in m_MaterialRejections)
                 Engine.Base.Compute.RecordWarning(rejection + ", so the material was built from the values in the model instead.");
+
+            m_Unrecognised.Report();
 
             if (m_ApproximatedReleaseEnds > 0)
             {

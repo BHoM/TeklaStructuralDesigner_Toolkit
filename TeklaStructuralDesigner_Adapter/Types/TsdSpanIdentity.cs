@@ -44,7 +44,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         public string ParentElementGroupName { get; }
         public string MaterialGrade { get; }
         public string SectionName { get; }
-        public string MemberConstruction { get; }
+        public MemberConstruction Construction { get; }
 
         // The construction points at the span ends; Guid.Empty and null if unresolved.
         public Guid StartPointId { get; }
@@ -74,7 +74,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             string parentElementGroupName,
             string materialGrade,
             string sectionName,
-            string memberConstruction,
+            MemberConstruction construction,
             Guid startPointId,
             Guid endPointId,
             Point startPosition,
@@ -91,7 +91,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             ParentElementGroupName = parentElementGroupName;
             MaterialGrade = materialGrade;
             SectionName = sectionName;
-            MemberConstruction = memberConstruction;
+            Construction = construction;
             StartPointId = startPointId;
             EndPointId = endPointId;
             StartPosition = startPosition;

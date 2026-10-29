@@ -58,9 +58,10 @@ namespace BH.Adapter.TeklaStructuralDesigner
         // One Panel per piece of a slab item's Complete contour (column drops cut out, openings as
         // holes), spanning along SpanDirection. Every piece shares the item's identifier, and
         // approximation says so when there is more than one. Empty, with skipReason, if none.
-        public static List<Panel> FromTsdSlabItem(this ISlabItem item, ISlab slab, IEnumerable<IPolygonWithHoles2D> contours, ISurfaceProperty property, out string spanWarning, out string skipReason, out string approximation)
+        // warnings are complete messages for the caller to count.
+        public static List<Panel> FromTsdSlabItem(this ISlabItem item, ISlab slab, IEnumerable<IPolygonWithHoles2D> contours, ISurfaceProperty property, out List<string> warnings, out string skipReason, out string approximation)
         {
-            spanWarning = null;
+            warnings = new List<string>();
             skipReason = null;
             approximation = null;
 
@@ -74,22 +75,33 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             ISlabData slabData = slab != null ? slab.SlabData.ValueOrDefault() : null;
+            SlabType slabType = slabData != null ? slabData.SlabType.ValueOrDefault(SlabType.Unknown) : SlabType.Unknown;
             DecompositionType decomposition = slabData != null ? slabData.DecompositionType.ValueOrDefault(DecompositionType.Unknown) : DecompositionType.Unknown;
 
+            bool slabTypeRecognised, spanTypeRecognised;
             TeklaStructuralDesignerPanelProperties fragment = new TeklaStructuralDesignerPanelProperties
             {
-                ElementType = "SlabItem",
+                ElementType = TeklaStructuralDesignerPanelElementType.SlabItem,
                 ElementName = item.Name,
                 ElementIndex = item.Index,
                 ElementId = item.Id,
                 SlabName = slab != null ? slab.Name : "",
                 SlabIndex = slab != null ? slab.Index : -1,
-                ElementSubType = slabData != null ? slabData.SlabType.ValueOrDefault(SlabType.Unknown).ToString() : "",
-                SpanType = decomposition == DecompositionType.Unknown ? "" : decomposition.ToString(),
+                SlabType = slabType.FromTsd(out slabTypeRecognised),
+                SpanType = decomposition.FromTsd(out spanTypeRecognised),
                 ElementGroupName = item.ElementGroupName ?? "",
             };
 
+            if (!slabTypeRecognised)
+                warnings.Add(WarningTally.UnrecognisedMessage("slab item(s)", "slab type", slabType));
+            if (!spanTypeRecognised)
+                warnings.Add(WarningTally.UnrecognisedMessage("slab item(s)", "span type", decomposition));
+
+            string spanWarning;
             BHoMVector localX = SpanDirection(item, plane, out spanWarning);
+            if (spanWarning != null)
+                warnings.Add(spanWarning);
+
             BHoMVector normal = Normal(plane);
 
             int built = 0;
@@ -152,12 +164,13 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         // One wall panel, with local x along the wall and its openings as Openings. Where its bottom
         // edge is at the base of the wall (baseZ), the wall's base support goes on that edge and
-        // onBase is true. openingSkipReasons holds one reason per opening left out.
-        public static Panel FromTsdWallPanel(this IStructuralWallPanel wallPanel, IStructuralWall wall, Polyline outline, IEnumerable<IWallOpening> openings, ISurfaceProperty property, Constraint6DOF baseSupport, double baseZ, out bool onBase, out string skipReason, out List<string> openingSkipReasons)
+        // onBase is true. warnings are complete messages for the caller to count, including one per
+        // opening left out.
+        public static Panel FromTsdWallPanel(this IStructuralWallPanel wallPanel, IStructuralWall wall, Polyline outline, IEnumerable<IWallOpening> openings, ISurfaceProperty property, Constraint6DOF baseSupport, double baseZ, out bool onBase, out string skipReason, out List<string> warnings)
         {
             onBase = false;
             skipReason = null;
-            openingSkipReasons = new List<string>();
+            warnings = new List<string>();
 
             ISegment3D bottom = wallPanel.BottomSegment.ValueOrDefault();
             if (bottom == null)
@@ -176,7 +189,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     if (rectangle != null)
                         holes.Add(rectangle);
                     else if (openingSkipReason != null)
-                        openingSkipReasons.Add(openingSkipReason);
+                        warnings.Add(WarningTally.SkipMessage("wall opening(s)", openingSkipReason));
                 }
             }
 
@@ -198,15 +211,21 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 onBase = true;
 
             IStructuralWallData wallData = wall.StructuralWallData.ValueOrDefault();
+            StructuralWallType wallType = wallData != null ? wallData.StructuralWallType.ValueOrDefault(StructuralWallType.Unknown) : StructuralWallType.Unknown;
+
+            bool wallTypeRecognised;
+            TeklaStructuralDesignerWallType convertedWallType = wallType.FromTsd(out wallTypeRecognised);
+            if (!wallTypeRecognised)
+                warnings.Add(WarningTally.UnrecognisedMessage("wall panel(s)", "wall type", wallType));
 
             return panel.SetIdentity(id, wallPanel.Id, new TeklaStructuralDesignerPanelProperties
             {
-                ElementType = "StructuralWall",
+                ElementType = TeklaStructuralDesignerPanelElementType.StructuralWall,
                 ElementName = wall.Name,
                 ElementIndex = wall.Index,
                 ElementId = wall.Id,
                 PanelIndex = wallPanel.Index,
-                ElementSubType = wallData != null ? wallData.StructuralWallType.ValueOrDefault(StructuralWallType.Unknown).ToString() : "",
+                WallType = convertedWallType,
                 ElementGroupName = wall.ElementGroupName ?? "",
             });
         }
@@ -280,11 +299,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // A roof or wind wall, outlined by its construction points and spanning one way: a roof along
-        // SpanDirection, a wind wall along its plane's x axis, with spanWarning saying why. Null, with
-        // skipReason, if a construction point is missing or the outline encloses no area.
-        public static Panel FromTsdLoadingPanel(this TsdAreaElement element, Dictionary<int, ConstructionPointInfo> pointByIndex, ISurfaceProperty property, out string spanWarning, out string skipReason)
+        // SpanDirection, a wind wall along its plane's x axis, with a warning saying why. Null, with
+        // skipReason, if a construction point is missing or the outline encloses no area. warnings
+        // are complete messages for the caller to count.
+        public static Panel FromTsdLoadingPanel(this TsdAreaElement element, Dictionary<int, ConstructionPointInfo> pointByIndex, ISurfaceProperty property, out List<string> warnings, out string skipReason)
         {
-            spanWarning = null;
+            warnings = new List<string>();
             skipReason = null;
 
             IRoof roof = element as IRoof;
@@ -307,12 +327,16 @@ namespace BH.Adapter.TeklaStructuralDesigner
             TsdPlane plane = element.ElementPlane.ValueOrDefault();
             BHoMVector normal = plane != null ? Normal(plane) : null;
             BHoMVector span = null;
+            string spanWarning = null;
             if (plane != null)
                 span = roof != null ? SpanDirection(element, plane, out spanWarning) : PlaneX(plane);
 
+            if (spanWarning != null)
+                warnings.Add(spanWarning);
+
             // The API reports no rotation angle for wind walls, so they keep their plane's x axis.
             if (roof == null)
-                spanWarning = "wind wall(s) have been pulled spanning along the x axis of their element plane, which is horizontal along the wall. Wind wall span direction is not supported at the moment: Tekla Structural Designer's API does not report a wind wall's rotation angle, so a wind wall rotated in Tekla Structural Designer - 90 degrees to span vertically between floors - will span the wrong way. Check the cladding direction of every wind wall in the receiving model";
+                warnings.Add("wind wall(s) have been pulled spanning along the x axis of their element plane, which is horizontal along the wall. Wind wall span direction is not supported at the moment: Tekla Structural Designer's API does not report a wind wall's rotation angle, so a wind wall rotated in Tekla Structural Designer - 90 degrees to span vertically between floors - will span the wrong way. Check the cladding direction of every wind wall in the receiving model");
 
             Panel panel = Helpers.Panel(Helpers.ClosedPolyline(points), null, null, span, normal, element.Name);
             if (panel == null)
@@ -324,14 +348,21 @@ namespace BH.Adapter.TeklaStructuralDesigner
             panel.Property = property;
 
             IRoofData roofData = roof != null ? roof.RoofData.ValueOrDefault() : null;
+            RoofType roofType = roofData != null ? roofData.RoofType.ValueOrDefault(RoofType.Unknown) : RoofType.Unknown;
+
+            bool roofTypeRecognised;
+            TeklaStructuralDesignerRoofType convertedRoofType = roofType.FromTsd(out roofTypeRecognised);
+            if (!roofTypeRecognised)
+                warnings.Add(WarningTally.UnrecognisedMessage("roof(s)", "roof type", roofType));
+
             return panel.SetIdentity(element.Name, element.Id, new TeklaStructuralDesignerPanelProperties
             {
-                ElementType = roof != null ? "Roof" : "WindWall",
+                ElementType = roof != null ? TeklaStructuralDesignerPanelElementType.Roof : TeklaStructuralDesignerPanelElementType.WindWall,
                 ElementName = element.Name,
                 ElementIndex = element.Index,
                 ElementId = element.Id,
-                ElementSubType = roofData != null ? roofData.RoofType.ValueOrDefault(RoofType.Unknown).ToString() : "",
-                SpanType = "OneWay",
+                RoofType = convertedRoofType,
+                SpanType = TeklaStructuralDesignerSpanType.OneWay,
                 ElementGroupName = element.ElementGroupName ?? "",
             });
         }

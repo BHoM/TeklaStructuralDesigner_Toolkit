@@ -60,7 +60,24 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         public void Skip(string what, string reason)
         {
-            Add(what + " were skipped because " + (string.IsNullOrWhiteSpace(reason) ? "they could not be converted" : reason));
+            Add(SkipMessage(what, reason));
+        }
+
+        /***************************************************/
+
+        // The message Skip adds, for a conversion that returns its warnings to the caller to add.
+        public static string SkipMessage(string what, string reason)
+        {
+            return what + " were skipped because " + (string.IsNullOrWhiteSpace(reason) ? "they could not be converted" : reason);
+        }
+
+        /***************************************************/
+
+        // The message for a TSD enum value newer than this toolkit, pulled as Undefined.
+        public static string UnrecognisedMessage(string what, string property, object value)
+        {
+            return what + " have a " + property + " this toolkit does not recognise ('" + value + "'), so it has been pulled as Undefined. " +
+                "This usually means the toolkit is older than the connected version of Tekla Structural Designer";
         }
 
         /***************************************************/

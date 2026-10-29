@@ -23,6 +23,7 @@
 using System;
 using System.ComponentModel;
 using BH.oM.Base;
+using BH.oM.Structure.Elements;
 
 namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
@@ -63,8 +64,8 @@ namespace BH.oM.Adapters.TeklaStructuralDesigner
         [Description("Section name of the span as named in Tekla Structural Designer, for example 'UB 457x191x67'. Retained verbatim, since the Bar's section may be a BHoM library section whose name differs slightly.")]
         public virtual string SectionName { get; set; } = "";
 
-        [Description("Construction type of the member in Tekla Structural Designer, for example 'SteelBeam' or 'SteelBrace'.")]
-        public virtual string MemberConstruction { get; set; } = "";
+        [Description("What the member does in the structure, from its Tekla Structural Designer construction type: Beam (beams, joists, purlins, rails, truss chords and wall beam elements), Column (columns, posts and wall column elements) or Brace (braces, ties and truss internal members). Undefined if Tekla Structural Designer reported no construction type. Whether the member is steel, concrete or timber is on the Bar's material.")]
+        public virtual StructuralUsage1D StructuralUsage { get; set; } = StructuralUsage1D.Undefined;
 
         /***************************************************/
     }

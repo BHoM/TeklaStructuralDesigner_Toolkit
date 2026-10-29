@@ -69,9 +69,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 }
 
                 IMemberData data = member.Data.ValueOrDefault();
-                string construction = data != null
-                    ? data.Construction.ValueOrDefault(default(MemberConstruction)).ToString()
-                    : "";
+                MemberConstruction construction = data != null
+                    ? data.Construction.ValueOrDefault(MemberConstruction.Unknown)
+                    : MemberConstruction.Unknown;
 
                 foreach (IMemberSpan span in spans)
                 {
@@ -135,7 +135,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     parentElementGroupName: groupInfo != null ? groupInfo.ParentName : "",
                     materialGrade: materialGrade,
                     sectionName: physicalSection.SectionName(),
-                    memberConstruction: p.Construction,
+                    construction: p.Construction,
                     startPointId: startInfo?.Id ?? Guid.Empty,
                     endPointId: endInfo?.Id ?? Guid.Empty,
                     startPosition: startInfo?.Position,

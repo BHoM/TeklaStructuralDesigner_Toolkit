@@ -128,7 +128,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
             // Slabs and walls with items or panels of their own selected, of which only those are pulled.
             HashSet<int> slabsWithItems = new HashSet<int>(panels
                 .Select(p => p.FindFragment<TeklaStructuralDesignerPanelProperties>())
-                .Where(p => p != null && p.ElementType == EntityType.SlabItem.ToString() && selection.AreaElements.Contains(Tuple.Create(EntityType.SlabItem, p.ElementIndex)))
+                .Where(p => p != null && p.ElementType == TeklaStructuralDesignerPanelElementType.SlabItem && selection.AreaElements.Contains(Tuple.Create(EntityType.SlabItem, p.ElementIndex)))
                 .Select(p => p.SlabIndex));
             HashSet<int> wallsWithPanels = new HashSet<int>(selection.WallPanels.Select(w => w.Item1));
 
@@ -140,8 +140,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
         private static bool IsSelected(Panel panel, TsdSelection selection, HashSet<int> slabsWithItems, HashSet<int> wallsWithPanels)
         {
             TeklaStructuralDesignerPanelProperties properties = panel.FindFragment<TeklaStructuralDesignerPanelProperties>();
-            EntityType type;
-            if (properties == null || !Enum.TryParse(properties.ElementType, out type))
+            if (properties == null)
+                return false;
+
+            EntityType type = properties.ElementType.ToTsd();
+            if (type == EntityType.Unknown)
                 return false;
 
             bool selected = selection.AreaElements.Contains(Tuple.Create(type, properties.ElementIndex));

@@ -73,8 +73,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
             foreach (Panel panel in ReadAllPanels(timeout, new PanelReadState(), elementTypes))
             {
                 TeklaStructuralDesignerPanelProperties properties = panel.FindFragment<TeklaStructuralDesignerPanelProperties>();
-                EntityType type;
-                if (properties == null || !Enum.TryParse(properties.ElementType, out type))
+                if (properties == null)
+                    continue;
+
+                EntityType type = properties.ElementType.ToTsd();
+                if (type == EntityType.Unknown)
                     continue;
 
                 AddToGroup(result, Tuple.Create(type, properties.ElementIndex), panel);
@@ -158,11 +161,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 if (approximation != null)
                     state.Approximate(approximation);
 
-                string spanWarning, skipReason;
-                List<Panel> panels = item.FromTsdSlabItem(slab, contours, property, out spanWarning, out skipReason, out approximation);
+                List<string> warnings;
+                string skipReason;
+                List<Panel> panels = item.FromTsdSlabItem(slab, contours, property, out warnings, out skipReason, out approximation);
 
-                if (spanWarning != null)
-                    state.Warnings.Add(spanWarning);
+                foreach (string warning in warnings)
+                    state.Warnings.Add(warning);
                 if (skipReason != null)
                     state.Warnings.Skip("slab item(s)", skipReason);
                 if (approximation != null)
@@ -231,11 +235,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
                     IEnumerable<IWallOpening> openings = outline != null ? ReadWallOpenings(wallPanel, timeout, state) : Enumerable.Empty<IWallOpening>();
 
                     bool onBase;
-                    List<string> openingSkipReasons;
-                    Panel panel = wallPanel.FromTsdWallPanel(wall, outline, openings, property, baseSupport, baseZ, out onBase, out skipReason, out openingSkipReasons);
+                    List<string> warnings;
+                    Panel panel = wallPanel.FromTsdWallPanel(wall, outline, openings, property, baseSupport, baseZ, out onBase, out skipReason, out warnings);
 
-                    foreach (string reason in openingSkipReasons)
-                        state.Warnings.Skip("wall opening(s)", reason);
+                    foreach (string warning in warnings)
+                        state.Warnings.Add(warning);
 
                     if (panel == null)
                     {
@@ -293,11 +297,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             foreach (TsdAreaElement element in elements)
             {
-                string spanWarning, skipReason;
-                Panel panel = element.FromTsdLoadingPanel(pointByIndex, state.LoadingPanelProperty(), out spanWarning, out skipReason);
+                List<string> warnings;
+                string skipReason;
+                Panel panel = element.FromTsdLoadingPanel(pointByIndex, state.LoadingPanelProperty(), out warnings, out skipReason);
 
-                if (spanWarning != null)
-                    state.Warnings.Add(spanWarning);
+                foreach (string warning in warnings)
+                    state.Warnings.Add(warning);
 
                 if (panel == null)
                 {

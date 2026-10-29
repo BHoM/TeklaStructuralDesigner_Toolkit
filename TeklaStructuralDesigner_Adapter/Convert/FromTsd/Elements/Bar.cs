@@ -58,6 +58,11 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 OrientationAngle = BarOrientationAngle(span.Span, start, end),
             };
 
+            bool recognised;
+            StructuralUsage1D usage = span.Construction.FromTsdStructuralUsage(out recognised);
+            if (!recognised)
+                cache.Unrecognised(WarningTally.UnrecognisedMessage("bar(s)", "construction type", span.Construction));
+
             bar.SetIdentity(span.ObjectId, span.SpanId);
             bar.Fragments.Add(new TeklaStructuralDesignerMemberProperties
             {
@@ -71,7 +76,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 ParentElementGroupName = span.ParentElementGroupName,
                 MaterialGrade = span.MaterialGrade,
                 SectionName = span.SectionName,
-                MemberConstruction = span.MemberConstruction,
+                StructuralUsage = usage,
             });
 
             return bar;
