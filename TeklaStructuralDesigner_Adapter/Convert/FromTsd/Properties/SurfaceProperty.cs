@@ -35,6 +35,25 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /**** Public Methods                            ****/
         /***************************************************/
 
+        // A slab item takes its slab's property, at its own depth where it overrides the slab's, and is
+        // a DropPanel where it is a column drop. See the ISlabData overload for the rest.
+        public static ISurfaceProperty FromTsdSurfaceProperty(this ISlabItem item, ISlabData slabData, IMaterialFragment material, bool detailed, out string approximation)
+        {
+            ISlabItemData itemData = item != null ? item.SlabItemData.ValueOrDefault() : null;
+
+            double depth = itemData != null && itemData.OverrideSlabDepth.ValueOrDefault(false)
+                ? itemData.Depth.ValueOrDefault(0)
+                : (slabData != null ? slabData.Depth.ValueOrDefault(0) : 0);
+            if (depth <= 0 && itemData != null)
+                depth = itemData.Depth.ValueOrDefault(0);
+
+            BHoMPanelType panelType = item != null && item.IsColumnDrop.ValueOrDefault(false) ? BHoMPanelType.DropPanel : BHoMPanelType.Slab;
+
+            return slabData.FromTsdSurfaceProperty(depth, material, panelType, detailed, out approximation);
+        }
+
+        /***************************************************/
+
         // depth is the slab item's overall depth in mm (plank plus structural topping, or including the
         // deck). Directional properties run along local x, the Panel's span direction.
         //  - detailed false: a ConstantThickness of the overall depth, the only slab type Robot and ETABS

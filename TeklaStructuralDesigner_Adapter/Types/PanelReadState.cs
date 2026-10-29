@@ -69,7 +69,7 @@ namespace BH.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         // The one way property every roof and wind wall shares: load goes to the two sides the span runs
-        // between, referenced from edge 1, which Convert.FromTsdPanel makes the edge along the span.
+        // between, referenced from edge 1, which Helpers.Panel makes the edge along the span.
         public LoadingPanelProperty LoadingPanelProperty()
         {
             if (m_LoadingProperty == null)
