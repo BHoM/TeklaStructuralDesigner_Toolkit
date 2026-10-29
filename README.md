@@ -31,7 +31,7 @@ This is a **read-only** adapter. Push (Create/Update/Delete) is not supported. W
 | `Grid` | One Grid per grid line of every architectural grid - see below |
 | `Loadcase`, `LoadCombination`, `ICase` | Loadcases with a `LoadNature`, and combinations whose `LoadCases` reference those Loadcases |
 | `ILoad`, or a concrete load type | Bar, nodal, area, contour and line loads - see below |
-| `BarResultRequest` / `BarForce` | Bar end forces |
+| `BarResultRequest` / `BarForce` | Bar end forces, or forces at every analysis node along a bar - see below |
 | `NodeResultRequest` / `NodeReaction`, `NodeDisplacement` | Support reactions and node displacements - see below |
 | `SelectionRequest` | Whatever is selected in Tekla Structural Designer - see below |
 
@@ -338,6 +338,23 @@ API package versions does not leave stale assemblies behind for the resolver to 
 
 Note that Rhino, Excel and any other host that has loaded the toolkit will hold a file lock on these
 assemblies. **Close them before rebuilding**, or the post-build copy fails with `MSB3021`.
+
+### Bar force divisions
+Tekla Structural Designer stores bar forces only at the nodes of its analysis model. A span is split
+into analysis elements wherever something connects to it - a secondary beam, a column, a brace, a
+support - and only the forces at the ends of those elements are reported. Nothing is stored between
+them, so a `BarResultRequest`'s `Divisions` cannot be honoured as evenly spaced points:
+
+- **`Divisions` of 2 or less** returns the two end forces of each bar, at positions 0 and 1 - for
+  connection design, for example.
+- **`Divisions` above 2** returns the forces at every analysis node along each bar instead, with a
+  warning. A bar split into n elements returns n + 1 results, whatever `Divisions` says, and each
+  result's `Divisions` is that count. **A bar with nothing connected along its length returns its end
+  forces only**, so the midspan moment of a simply supported beam is not among them.
+- **Positions are spaced evenly by node order, not measured**: the second of three results is at 0.5
+  even when the node it came from is not at midspan.
+- `BarForceSource.SpanEnds` always returns end forces only, whatever `Divisions` says, and so does
+  `Auto` when it falls back to that route.
 
 ### Bar force sign convention
 Pulled `BarForce`s follow [BHoM's structural sign convention](https://bhom.xyz/documentation/BHoM_oM/Structure_oM/BHoM-Structural-Conventions/#major-axis-bending-moment-my-and-shear-force-fz):

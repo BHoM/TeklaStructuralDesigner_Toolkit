@@ -122,6 +122,22 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
+        internal static string DivisionsNotEvenlyDistributed(int divisions)
+        {
+            return "Divisions is set to " + divisions + ", but Tekla Structural Designer only stores bar forces at the nodes of its analysis model, where another element or a support connects to the bar, " +
+                   "not at evenly spaced points. Each bar returns one result per node, so the number and positions of results may not match the Divisions input, " +
+                   "and a bar with nothing connected along its length returns its end forces only, without the force at midspan. Set Divisions to 2 to read end forces only.";
+        }
+
+        /***************************************************/
+
+        internal static string DivisionsIgnoredBySpanEnds(int divisions)
+        {
+            return "Divisions is set to " + divisions + ", but BarForceSource is SpanEnds, which reads the end forces of each bar only. Only the two end forces of each bar have been returned.";
+        }
+
+        /***************************************************/
+
         internal static string NoSpans()
         {
             return "No spans were found in the model open in Tekla Structural Designer, so no bar results could be read.";

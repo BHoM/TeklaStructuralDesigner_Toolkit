@@ -95,10 +95,12 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<BarForce>();       // FilterCases has already recorded why.
 
             bool endsOnly = request.Divisions <= 2;
-            if (request.Divisions > 2)
+            if (!endsOnly)
             {
-                Engine.Base.Compute.RecordNote("Tekla Structural Designer reports results at solver stations rather than at an arbitrary division count; every station has been returned instead of exactly " +
-                    request.Divisions + ".");
+                if (config.BarForceSource == TeklaStructuralDesignerBarForceSource.SpanEnds)
+                    Engine.Base.Compute.RecordWarning(ErrorMessages.DivisionsIgnoredBySpanEnds(request.Divisions));
+                else
+                    Engine.Base.Compute.RecordWarning(ErrorMessages.DivisionsNotEvenlyDistributed(request.Divisions));
             }
 
             List<BarForce> results;
@@ -137,7 +139,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (!SolverResultsAreTrustworthy(solverResults, spans, cases, config, timeoutSeconds))
             {
                 Engine.Base.Compute.RecordWarning(
-                    "The batched solver results did not match a per span end spot check; falling back to the slower but proven per span end route for this pull.");
+                    "The batched solver results did not match a per span end spot check; falling back to the slower but proven per span end route for this pull." +
+                    (endsOnly ? "" : " That route reads end forces only, so only the two end forces of each bar have been returned."));
                 return BarForcesFromSpanEnds(spans, cases, config, timeoutSeconds);
             }
 
