@@ -38,29 +38,6 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /**** Public Methods                            ****/
         /***************************************************/
 
-        [TestCase(48, TeklaStructuralDesignerLimitState.Strength, 1048)]
-        [TestCase(48, TeklaStructuralDesignerLimitState.Service, 2048)]
-        [TestCase(0, TeklaStructuralDesignerLimitState.Strength, 1000)]
-        [TestCase(999, TeklaStructuralDesignerLimitState.Service, 2999)]
-        public void CaseNumberEncodesLimitStateInTheThousands(int combinationNumber, TeklaStructuralDesignerLimitState limitState, int expected)
-        {
-            Query.CaseNumber(combinationNumber, limitState).ShouldBe(expected);
-        }
-
-        /***************************************************/
-
-        [TestCase(-1)]
-        [TestCase(1000)]
-        public void CaseNumberRefusesNumbersOutsideTheBand(int combinationNumber)
-        {
-            BH.Engine.Base.Compute.ClearCurrentEvents();
-
-            Query.CaseNumber(combinationNumber, TeklaStructuralDesignerLimitState.Strength).ShouldBe(-1);
-            BH.Engine.Base.Query.CurrentEvents().Any(e => e.Type == BH.oM.Base.Debugging.EventType.Error).ShouldBeTrue();
-        }
-
-        /***************************************************/
-
         [TestCase(1048, 48)]
         [TestCase(2048, 48)]
         [TestCase(1000, 0)]
@@ -70,28 +47,6 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         public void CombinationNumberReversesCaseNumber(int caseNumber, int expected)
         {
             Query.CombinationNumber(caseNumber).ShouldBe(expected);
-        }
-
-        /***************************************************/
-
-        [Test]
-        public void CombinationNamePrefixesTheLimitState()
-        {
-            Query.CombinationName(" 48 1.35Gk + 1.5LL ", TeklaStructuralDesignerLimitState.Service).ShouldBe("Service 48 1.35Gk + 1.5LL");
-            Query.CombinationName(null, TeklaStructuralDesignerLimitState.Strength).ShouldBe("Strength ");
-        }
-
-        /***************************************************/
-
-        [TestCase("48 1.35Gk + 1.5LL", 48)]
-        [TestCase("  30 LL CONCOURSE", 30)]
-        [TestCase("7", 7)]
-        [TestCase("LL 30", -1)]
-        [TestCase("", -1)]
-        [TestCase(null, -1)]
-        public void ReferenceNumberReadsTheLeadingNumber(string name, int expected)
-        {
-            Query.ReferenceNumber(name).ShouldBe(expected);
         }
 
         /***************************************************/

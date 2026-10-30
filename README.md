@@ -249,8 +249,8 @@ the combination is switched on for:
 - **Numbers** are the ones Tekla Structural Designer shows - the number each name starts with - not
   its internal index, which differs. Strength is 1000 + the combination number and Service 2000 + it,
   so a number is unique across loadcases and both limit states and reads straight back to both the
-  combination and the limit state. The convention lives in the Engine: `Query.CaseNumber`,
-  `Query.CombinationNumber`, `Query.LimitState`, `Query.FilterByLimitState` and `Query.CombinationName`.
+  combination and the limit state. The adapter assigns these numbers. To read them back, the Engine
+  has `Query.CombinationNumber`, `Query.LimitState` and `Query.FilterByLimitState`.
   Combination numbers of 1000 or more have no room in the convention and are left out, with an error.
 - Each LoadCombination carries a `TeklaStructuralDesignerCombinationProperties` fragment with its
   `LimitState` and the Tekla Structural Designer combination number, name and Guid.

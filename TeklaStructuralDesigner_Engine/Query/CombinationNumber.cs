@@ -32,13 +32,13 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
         /**** Public Methods                            ****/
         /***************************************************/
 
-        [Description("The Tekla Structural Designer combination number a BHoM case number was made from - the reverse of CaseNumber. Returns -1 for a number that is not a combination case number, such as a loadcase's.")]
+        [Description("The Tekla Structural Designer combination number a BHoM case number was made from: 48 for 1048 (its Strength case) or 2048 (its Service case). Returns -1 for a number that is not a combination case number, such as a loadcase's.")]
         [Input("caseNumber", "A LoadCombination Number or a result's ResultCase, as pulled from Tekla Structural Designer.")]
         [Output("combinationNumber", "The combination's number as shown in Tekla Structural Designer.")]
         public static int CombinationNumber(int caseNumber)
         {
             TeklaStructuralDesignerLimitState limitState;
-            return LimitState(caseNumber, out limitState) ? caseNumber % NumberBand : -1;
+            return LimitStateFromNumber(caseNumber, out limitState) ? caseNumber % NumberBand : -1;
         }
 
         /***************************************************/

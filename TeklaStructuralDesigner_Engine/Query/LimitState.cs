@@ -31,6 +31,16 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
     public static partial class Query
     {
         /***************************************************/
+        /**** Private Fields                            ****/
+        /***************************************************/
+
+        // A combination's limit state is the thousands of its case number, as the adapter numbers them:
+        // combination 48 is 1048 for Strength and 2048 for Service.
+        private const int NumberBand = 1000;
+        private const int StrengthBand = 1;
+        private const int ServiceBand = 2;
+
+        /***************************************************/
         /**** Public Methods                            ****/
         /***************************************************/
 
@@ -50,12 +60,24 @@ namespace BH.Engine.Adapters.TeklaStructuralDesigner
                 return properties.LimitState;
 
             TeklaStructuralDesignerLimitState fromNumber;
-            if (LimitState(combination.Number, out fromNumber))
+            if (LimitStateFromNumber(combination.Number, out fromNumber))
                 return fromNumber;
 
             Base.Compute.RecordError("LoadCombination '" + combination.Name + "' carries no Tekla Structural Designer combination data and its Number (" + combination.Number +
                 ") is not a Tekla Structural Designer combination number, so its limit state is unknown.");
             return TeklaStructuralDesignerLimitState.Strength;
+        }
+
+        /***************************************************/
+        /**** Private Methods                           ****/
+        /***************************************************/
+
+        // The limit state a case number is in, or false if it is not a combination case number.
+        private static bool LimitStateFromNumber(int caseNumber, out TeklaStructuralDesignerLimitState limitState)
+        {
+            int band = caseNumber / NumberBand;
+            limitState = band == ServiceBand ? TeklaStructuralDesignerLimitState.Service : TeklaStructuralDesignerLimitState.Strength;
+            return caseNumber >= 0 && (band == StrengthBand || band == ServiceBand);
         }
 
         /***************************************************/
