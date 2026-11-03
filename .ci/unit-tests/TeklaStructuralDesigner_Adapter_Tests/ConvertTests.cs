@@ -49,6 +49,33 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        public void PointsAreScaledAndVectorsAreNot()
+        {
+            Point point = new TsdPoint3D(1000, 2000, -500).FromTsdPoint();
+            Vector vector = new TsdVector3D(0, 0, 1).FromTsdVector();
+
+            point.X.ShouldBe(1, 1e-12);
+            point.Y.ShouldBe(2, 1e-12);
+            point.Z.ShouldBe(-0.5, 1e-12);
+            vector.Z.ShouldBe(1);
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void StableGuidIsTheSameForTheSameObjectOnly()
+        {
+            Guid tsdId = Guid.NewGuid();
+            Guid guid = Helpers.StableGuid("Panel", tsdId, 0);
+
+            Helpers.StableGuid("Panel", tsdId, 0).ShouldBe(guid);
+            Helpers.StableGuid("Panel", tsdId, 1).ShouldNotBe(guid);
+            Helpers.StableGuid("Bar", tsdId, 0).ShouldNotBe(guid);
+        }
+
+        /***************************************************/
+
+        [Test]
         public void SummaryShowsTheFirstNamesAndCountsTheRest()
         {
             Helpers.Summary(new[] { "A", "", "C" }).ShouldBe("A, <unnamed>, C");

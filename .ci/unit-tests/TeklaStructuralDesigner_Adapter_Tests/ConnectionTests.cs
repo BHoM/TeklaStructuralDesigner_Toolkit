@@ -81,6 +81,24 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Pull on an adapter that never connected must return an empty list with a warning, not throw.")]
+        public void PullWithNoConnectionReturnsEmptyWithWarning()
+        {
+            TeklaStructuralDesignerAdapter adapter = new TeklaStructuralDesignerAdapter();
+            BH.Engine.Base.Compute.ClearCurrentEvents();
+
+            var request = new BarResultRequest { ResultType = BarResultType.BarForce };
+            var pulled = adapter.Pull(request).ToList();
+
+            pulled.Count.ShouldBe(0);
+            BH.Engine.Base.Query.CurrentEvents()
+                .Any(e => e.Type == BH.oM.Base.Debugging.EventType.Warning)
+                .ShouldBeTrue();
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Push is not supported by this adapter and must say so clearly rather than silently succeed.")]
         public void PushRecordsAnErrorAndReturnsEmpty()
         {
