@@ -48,6 +48,54 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /**** Public Methods                            ****/
         /***************************************************/
 
+        // Forces in N, moments in N.mm, as Tekla Structural Designer reports them.
+        private static readonly StubForce m_Force = new StubForce(10, 1, 2, 1000, 2000, 3000);
+
+        /***************************************************/
+
+        [Test]
+        public void BarForceAtTheStartOfABeamIsReversedAndTurned()
+        {
+            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 0, 2, true, false);
+
+            force.FX.ShouldBe(-10, 1e-9);
+            force.FY.ShouldBe(1, 1e-9);
+            force.FZ.ShouldBe(2, 1e-9);
+            force.MX.ShouldBe(-1, 1e-9);
+            force.MY.ShouldBe(3, 1e-9);
+            force.MZ.ShouldBe(2, 1e-9);
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void BarForceAtTheEndOfABeamIsTurnedOnly()
+        {
+            BarForce force = m_Force.FromTsdBarForce("B1:0", 1048, 1, 2, false, false);
+
+            force.FX.ShouldBe(10, 1e-9);
+            force.FY.ShouldBe(-1, 1e-9);
+            force.FZ.ShouldBe(-2, 1e-9);
+            force.MX.ShouldBe(1, 1e-9);
+            force.MY.ShouldBe(-3, 1e-9);
+            force.MZ.ShouldBe(-2, 1e-9);
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void BarForceOnAColumnIsNotTurned()
+        {
+            BarForce force = m_Force.FromTsdBarForce("C1:0", 1048, 0, 2, true, true);
+
+            force.FY.ShouldBe(-1, 1e-9);
+            force.FZ.ShouldBe(-2, 1e-9);
+            force.MY.ShouldBe(-3, 1e-9);
+            force.MZ.ShouldBe(-2, 1e-9);
+        }
+
+        /***************************************************/
+
         [Test]
         public void PointsAreScaledAndVectorsAreNot()
         {
@@ -181,6 +229,27 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
                 "2 load(s) were skipped because x.",
                 "1 load(s) were skipped because they could not be converted.",
             });
+        }
+
+        /***************************************************/
+        /**** Private Classes                           ****/
+        /***************************************************/
+
+        private sealed class StubForce : IForce3DLocal, IForce3DGlobal
+        {
+            public StubForce(double fx, double fy, double fz, double mx, double my, double mz)
+            {
+                Fx = fx; Fy = fy; Fz = fz; Mx = mx; My = my; Mz = mz;
+            }
+
+            public double Fx { get; }
+            public double Fy { get; }
+            public double Fz { get; }
+            public double Mx { get; }
+            public double My { get; }
+            public double Mz { get; }
+            public TsdVector3D Forces => new TsdVector3D(Fx, Fy, Fz);
+            public TsdVector3D Moments => new TsdVector3D(Mx, My, Mz);
         }
 
         /***************************************************/
