@@ -39,6 +39,64 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Every member construction type in the API maps to a StructuralUsage1D, and only Unknown maps to Undefined.")]
+        public void EveryMemberConstructionIsRecognised()
+        {
+            foreach (MemberConstruction construction in Enum.GetValues(typeof(MemberConstruction)))
+            {
+                // Act
+                bool recognised;
+                StructuralUsage1D usage = construction.FromTsdStructuralUsage(out recognised);
+
+                // Assert
+                recognised.ShouldBeTrue(construction.ToString());
+                (usage == StructuralUsage1D.Undefined).ShouldBe(construction == MemberConstruction.Unknown, construction.ToString());
+            }
+        }
+
+        /***************************************************/
+
+        [TestCase(MemberConstruction.SteelBrace)]
+        [TestCase(MemberConstruction.TimberBrace)]
+        [TestCase(MemberConstruction.ColdFormedBrace)]
+        [TestCase(MemberConstruction.GeneralMaterialBrace)]
+        [TestCase(MemberConstruction.SteelTie)]
+        [TestCase(MemberConstruction.SteelTrussInternal)]
+        [TestCase(MemberConstruction.TimberTrussInternal)]
+        [TestCase(MemberConstruction.ColdFormedTrussInternal)]
+        [Description("Braces, ties and truss internal members are braces.")]
+        public void BracesTiesAndTrussInternalsAreBraces(MemberConstruction construction)
+        {
+            construction.FromTsdStructuralUsage(out _).ShouldBe(StructuralUsage1D.Brace);
+        }
+
+        /***************************************************/
+
+        [TestCase(MemberConstruction.SteelTrussMemberTop)]
+        [TestCase(MemberConstruction.TimberTrussMemberBottom)]
+        [TestCase(MemberConstruction.ColdFormedTrussMemberSide)]
+        [TestCase(MemberConstruction.Purlin)]
+        [TestCase(MemberConstruction.ConcreteWallBeamElement)]
+        [Description("Truss chords, purlins and wall beam elements are beams.")]
+        public void ChordsPurlinsAndWallBeamElementsAreBeams(MemberConstruction construction)
+        {
+            construction.FromTsdStructuralUsage(out _).ShouldBe(StructuralUsage1D.Beam);
+        }
+
+        /***************************************************/
+
+        [TestCase(MemberConstruction.SteelGablePost)]
+        [TestCase(MemberConstruction.ColdFormedParapetPost)]
+        [TestCase(MemberConstruction.ConcreteWallColumnElement)]
+        [Description("Posts and wall column elements are columns.")]
+        public void PostsAndWallColumnElementsAreColumns(MemberConstruction construction)
+        {
+            construction.FromTsdStructuralUsage(out _).ShouldBe(StructuralUsage1D.Column);
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Every span type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
         public void EverySpanTypeMapsByName()
         {
