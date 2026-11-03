@@ -99,6 +99,23 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("ReadResults has its own connection guard, independent of Pull's, in case it is ever called directly.")]
+        public void ReadResultsWithNoConnectionReturnsEmptyWithWarning()
+        {
+            TeklaStructuralDesignerAdapter adapter = new TeklaStructuralDesignerAdapter();
+            BH.Engine.Base.Compute.ClearCurrentEvents();
+
+            var results = adapter.ReadResults(new BarResultRequest { ResultType = BarResultType.BarForce }).ToList();
+
+            results.Count.ShouldBe(0);
+            BH.Engine.Base.Query.CurrentEvents()
+                .Any(e => e.Type == BH.oM.Base.Debugging.EventType.Warning)
+                .ShouldBeTrue();
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Push is not supported by this adapter and must say so clearly rather than silently succeed.")]
         public void PushRecordsAnErrorAndReturnsEmpty()
         {
