@@ -98,6 +98,8 @@ namespace BH.Adapter.TeklaStructuralDesigner
             List<Panel> panels = new List<Panel>();
             if (wanted(EntityType.SlabItem) || wanted(EntityType.Slab))
                 panels.AddRange(ReadSlabPanels(timeout, state));
+            if (wanted(EntityType.StructuralWall))
+                panels.AddRange(ReadWallPanels(timeout, state));
             if (wanted(EntityType.Roof) || wanted(EntityType.WindWall))
                 panels.AddRange(ReadLoadingPanels(timeout, state));
 
@@ -174,6 +176,102 @@ namespace BH.Adapter.TeklaStructuralDesigner
             }
 
             return result;
+        }
+
+        /***************************************************/
+
+        // One Panel per wall panel (see Convert.FromTsdWallPanel). Openings wholly inside a wall panel
+        // become its Openings; ones straddling two are left out.
+        private List<Panel> ReadWallPanels(int timeout, PanelReadState state)
+        {
+            List<Panel> result = new List<Panel>();
+
+            IEnumerable<IStructuralWall> walls;
+            if (!Async.TryRunSync(ct => m_Model.GetStructuralWallsAsync(null, ct), timeout, "reading structural walls", "no wall Panels have been pulled", out walls, true))
+                return result;
+
+            foreach (IStructuralWall wall in walls)
+            {
+                int count = wall.SpanCount.ValueOrDefault(0);
+                if (count <= 0)
+                {
+                    state.Warnings.Skip("wall(s)", "they have no panels");
+                    continue;
+                }
+
+                IEnumerable<IStructuralWallPanel> panelsRead;
+                string error;
+                if (!Async.TryRunSync(ct => wall.GetSpanAsync(Enumerable.Range(0, count), ct), timeout, "reading the panels of wall '" + wall.Name + "'", out panelsRead, out error))
+                {
+                    state.Warnings.Skip("wall(s)", "their panels could not be read (" + error + ")");
+                    continue;
+                }
+
+                List<IStructuralWallPanel> wallPanels = panelsRead.ToList();
+
+                // The wall's base support goes on the bottom edge of every wall panel at the base.
+                string supportWarning;
+                Constraint6DOF baseSupport = wall.StructuralWallData.ValueOrDefault().FromTsdWallBaseSupport(out supportWarning);
+                if (supportWarning != null)
+                    state.Warnings.Add(supportWarning);
+
+                double baseZ = wallPanels.FromTsdBaseLevel();
+                bool baseSupported = false;
+
+                foreach (IStructuralWallPanel wallPanel in wallPanels)
+                {
+                    string skipReason;
+                    Polyline outline = wallPanel.FromTsdWallOutline(out skipReason);
+                    if (skipReason != null)
+                    {
+                        state.Warnings.Skip("wall panel(s)", skipReason);
+                        continue;
+                    }
+
+                    IStructuralWallPanelData panelData = wallPanel.WallPanelData.ValueOrDefault();
+                    IMaterialFragment material = state.Materials.Material(panelData != null ? panelData.Material.ValueOrDefault() : null);
+                    ISurfaceProperty property = state.Shared(panelData.FromTsdSurfaceProperty(material));
+
+                    IEnumerable<IWallOpening> openings = outline != null ? ReadWallOpenings(wallPanel, timeout, state) : Enumerable.Empty<IWallOpening>();
+
+                    bool onBase;
+                    List<string> warnings;
+                    Panel panel = wallPanel.FromTsdWallPanel(wall, outline, openings, property, baseSupport, baseZ, out onBase, out skipReason, out warnings);
+
+                    foreach (string warning in warnings)
+                        state.Warnings.Add(warning);
+
+                    if (panel == null)
+                    {
+                        state.Warnings.Skip("wall panel(s)", skipReason);
+                        continue;
+                    }
+
+                    baseSupported |= onBase;
+                    result.Add(panel);
+                }
+
+                if (baseSupport != null && !baseSupported)
+                    state.Warnings.Add("wall(s) generate a support along their base, but no wall panel edge was found there to carry it, so they have been pulled unsupported");
+            }
+
+            return result;
+        }
+
+        /***************************************************/
+
+        // A wall panel's openings, or none, counted as skipped, if they cannot be read.
+        private static IEnumerable<IWallOpening> ReadWallOpenings(IStructuralWallPanel wallPanel, int timeout, PanelReadState state)
+        {
+            IEnumerable<IWallOpening> openings;
+            string error;
+            if (!Async.TryRunSync(ct => wallPanel.GetOpeningsAsync(false, ct), timeout, "reading wall openings", out openings, out error))
+            {
+                state.Warnings.Skip("wall opening(s)", "they could not be read (" + error + ")");
+                return Enumerable.Empty<IWallOpening>();
+            }
+
+            return openings;
         }
 
         /***************************************************/

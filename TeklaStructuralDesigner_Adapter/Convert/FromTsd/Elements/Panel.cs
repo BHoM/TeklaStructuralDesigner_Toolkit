@@ -129,6 +129,175 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
+        // A wall panel's outline: its bottom edge, then its top edge back the other way. Null, with
+        // skipReason, if Tekla Structural Designer reported no top or bottom edge; null without one
+        // if the edges enclose no area, which FromTsdWallPanel then reports.
+        public static Polyline FromTsdWallOutline(this IStructuralWallPanel wallPanel, out string skipReason)
+        {
+            skipReason = null;
+
+            ISegment3D bottom = wallPanel.BottomSegment.ValueOrDefault();
+            ISegment3D top = wallPanel.TopSegment.ValueOrDefault();
+            if (bottom == null || top == null)
+            {
+                skipReason = "Tekla Structural Designer reported no top or bottom edge for them";
+                return null;
+            }
+
+            BHoMPoint b0 = bottom.GetPoint(Location.Start).FromTsdPoint();
+            BHoMPoint b1 = bottom.GetPoint(Location.End).FromTsdPoint();
+            BHoMPoint t0 = top.GetPoint(Location.Start).FromTsdPoint();
+            BHoMPoint t1 = top.GetPoint(Location.End).FromTsdPoint();
+
+            // A top edge running the other way would cross the outline over itself.
+            if (b1.Distance(t1) > b1.Distance(t0))
+            {
+                BHoMPoint swap = t0;
+                t0 = t1;
+                t1 = swap;
+            }
+
+            return Helpers.ClosedPolyline(new[] { b0, b1, t1, t0 });
+        }
+
+        /***************************************************/
+
+        // One wall panel, with local x along the wall and its openings as Openings. Where its bottom
+        // edge is at the base of the wall (baseZ), the wall's base support goes on that edge and
+        // onBase is true. warnings are complete messages for the caller to count, including one per
+        // opening left out.
+        public static Panel FromTsdWallPanel(this IStructuralWallPanel wallPanel, IStructuralWall wall, Polyline outline, IEnumerable<IWallOpening> openings, ISurfaceProperty property, Constraint6DOF baseSupport, double baseZ, out bool onBase, out string skipReason, out List<string> warnings)
+        {
+            onBase = false;
+            skipReason = null;
+            warnings = new List<string>();
+
+            ISegment3D bottom = wallPanel.BottomSegment.ValueOrDefault();
+            if (bottom == null)
+            {
+                skipReason = "Tekla Structural Designer reported no top or bottom edge for them";
+                return null;
+            }
+
+            List<Polyline> holes = new List<Polyline>();
+            if (outline != null)
+            {
+                foreach (IWallOpening opening in openings ?? Enumerable.Empty<IWallOpening>())
+                {
+                    string openingSkipReason;
+                    Polyline rectangle = opening.FromTsdWallOpening(outline, out openingSkipReason);
+                    if (rectangle != null)
+                        holes.Add(rectangle);
+                    else if (openingSkipReason != null)
+                        warnings.Add(WarningTally.SkipMessage("wall opening(s)", openingSkipReason));
+                }
+            }
+
+            BHoMPoint b0 = bottom.GetPoint(Location.Start).FromTsdPoint();
+            BHoMPoint b1 = bottom.GetPoint(Location.End).FromTsdPoint();
+
+            TsdPlane wallPlane = wall.ElementPlane.ValueOrDefault();
+            BHoMVector wallNormal = wallPlane != null ? Normal(wallPlane) : null;
+
+            string id = wall.Name + ":" + wallPanel.Index;
+            Panel panel = Helpers.Panel(outline, holes, property, b1 - b0, wallNormal, id);
+            if (panel == null)
+            {
+                skipReason = "their outline did not enclose an area";
+                return null;
+            }
+
+            if (baseSupport != null && Math.Max(b0.Z, b1.Z) - baseZ < WallBaseTolerance && SupportEdge(panel, b0, b1, baseSupport))
+                onBase = true;
+
+            IStructuralWallData wallData = wall.StructuralWallData.ValueOrDefault();
+            StructuralWallType wallType = wallData != null ? wallData.StructuralWallType.ValueOrDefault(StructuralWallType.Unknown) : StructuralWallType.Unknown;
+
+            bool wallTypeRecognised;
+            TeklaStructuralDesignerWallType convertedWallType = wallType.FromTsd(out wallTypeRecognised);
+            if (!wallTypeRecognised)
+                warnings.Add(WarningTally.UnrecognisedMessage("wall panel(s)", "wall type", wallType));
+
+            return panel.SetIdentity(id, wallPanel.Id, new TeklaStructuralDesignerPanelProperties
+            {
+                ElementType = TeklaStructuralDesignerPanelElementType.StructuralWall,
+                ElementName = wall.Name,
+                ElementIndex = wall.Index,
+                ElementId = wall.Id,
+                PanelIndex = wallPanel.Index,
+                WallType = convertedWallType,
+                ElementGroupName = wall.ElementGroupName ?? "",
+            });
+        }
+
+        /***************************************************/
+
+        // A wall opening is a Width by Height rectangle in its reference plane, with its corner at
+        // Offset from its reference point (not the plane origin). Verified against the solver mesh.
+        // Null, with skipReason, if it has no size or position, or is not wholly inside panelOutline.
+        public static Polyline FromTsdWallOpening(this IWallOpening opening, Polyline panelOutline, out string skipReason)
+        {
+            skipReason = null;
+
+            TsdPlane plane = opening.ReferencePlane.ValueOrDefault();
+            double width = opening.Width.ValueOrDefault(0);
+            double height = opening.Height.ValueOrDefault(0);
+            if (plane == null || width <= 0 || height <= 0)
+            {
+                skipReason = "they have no reference plane or no size";
+                return null;
+            }
+
+            if (opening.ReferenceCoordinates == null || !opening.ReferenceCoordinates.IsApplicable)
+            {
+                skipReason = "they have no reference point to be placed from";
+                return null;
+            }
+
+            Vector3D reference = opening.ReferenceCoordinates.Value;
+            Point2D origin = plane.Global2Local(new Point3D(reference.X, reference.Y, reference.Z));
+            Vector2D offset = opening.Offset.ValueOrDefault();
+
+            double x = origin.X + offset.X;
+            double y = origin.Y + offset.Y;
+
+            Point2D[] corners =
+            {
+                new Point2D(x, y),
+                new Point2D(x + width, y),
+                new Point2D(x + width, y + height),
+                new Point2D(x, y + height),
+            };
+
+            Polyline rectangle = corners.FromTsdPolyline(plane);
+            if (rectangle == null)
+                return null;
+
+            if (!panelOutline.IsContaining(rectangle.ControlPoints, true, 1e-3))
+            {
+                skipReason = "they straddle more than one wall panel, or fall outside the panel they were reported against";
+                return null;
+            }
+
+            return rectangle;
+        }
+
+        /***************************************************/
+
+        // The lowest point of the bottom edges of a wall's panels: the base of the wall. NaN if no
+        // panel reports a bottom edge.
+        public static double FromTsdBaseLevel(this IEnumerable<IStructuralWallPanel> wallPanels)
+        {
+            return wallPanels
+                .Select(p => p.BottomSegment.ValueOrDefault())
+                .Where(s => s != null)
+                .SelectMany(s => new[] { s.GetPoint(Location.Start).FromTsdPoint().Z, s.GetPoint(Location.End).FromTsdPoint().Z })
+                .DefaultIfEmpty(double.NaN)
+                .Min();
+        }
+
+        /***************************************************/
+
         // A roof or wind wall, outlined by its construction points and spanning one way: a roof along
         // SpanDirection, a wind wall along its plane's x axis, with a warning saying why. Null, with
         // skipReason, if a construction point is missing or the outline encloses no area. warnings
@@ -270,6 +439,31 @@ namespace BH.Adapter.TeklaStructuralDesigner
         {
             BHoMVector normal = plane.Normal.ValueOrDefault().FromTsdVector();
             return normal.Length() > 0 ? normal.Normalise() : null;
+        }
+
+        /***************************************************/
+
+        // Puts the support on the external edge between start and end, in either direction. False if
+        // there is none.
+        private static bool SupportEdge(Panel panel, BHoMPoint start, BHoMPoint end, Constraint6DOF support)
+        {
+            foreach (Edge edge in panel.ExternalEdges ?? new List<Edge>())
+            {
+                if (edge?.Curve == null)
+                    continue;
+
+                BHoMPoint edgeStart = edge.Curve.IStartPoint();
+                BHoMPoint edgeEnd = edge.Curve.IEndPoint();
+
+                if ((edgeStart.Distance(start) < WallBaseTolerance && edgeEnd.Distance(end) < WallBaseTolerance) ||
+                    (edgeStart.Distance(end) < WallBaseTolerance && edgeEnd.Distance(start) < WallBaseTolerance))
+                {
+                    edge.Support = support;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /***************************************************/

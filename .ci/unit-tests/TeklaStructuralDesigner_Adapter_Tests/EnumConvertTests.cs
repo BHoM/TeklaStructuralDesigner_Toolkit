@@ -97,10 +97,49 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("A value newer than the toolkit is reported as not recognised and pulled as Undefined.")]
+        public void UnknownFutureValuesAreNotRecognised()
+        {
+            // Arrange
+            bool usageRecognised, slabRecognised, wallRecognised, roofRecognised, spanRecognised;
+
+            // Act
+            StructuralUsage1D usage = ((MemberConstruction)999).FromTsdStructuralUsage(out usageRecognised);
+            TeklaStructuralDesignerSlabType slab = ((SlabType)999).FromTsd(out slabRecognised);
+            TeklaStructuralDesignerWallType wall = ((StructuralWallType)999).FromTsd(out wallRecognised);
+            TeklaStructuralDesignerRoofType roof = ((RoofType)999).FromTsd(out roofRecognised);
+            TeklaStructuralDesignerSpanType span = ((DecompositionType)999).FromTsd(out spanRecognised);
+
+            // Assert
+            usageRecognised.ShouldBeFalse();
+            slabRecognised.ShouldBeFalse();
+            wallRecognised.ShouldBeFalse();
+            roofRecognised.ShouldBeFalse();
+            spanRecognised.ShouldBeFalse();
+            usage.ShouldBe(StructuralUsage1D.Undefined);
+            slab.ShouldBe(TeklaStructuralDesignerSlabType.Undefined);
+            wall.ShouldBe(TeklaStructuralDesignerWallType.Undefined);
+            roof.ShouldBe(TeklaStructuralDesignerRoofType.Undefined);
+            span.ShouldBe(TeklaStructuralDesignerSpanType.Undefined);
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Every slab type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
         public void EverySlabTypeMapsByName()
         {
             foreach (SlabType value in Enum.GetValues(typeof(SlabType)))
+                ShouldMapByName(value, value.FromTsd(out bool recognised), recognised);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Every wall type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
+        public void EveryWallTypeMapsByName()
+        {
+            foreach (StructuralWallType value in Enum.GetValues(typeof(StructuralWallType)))
                 ShouldMapByName(value, value.FromTsd(out bool recognised), recognised);
         }
 

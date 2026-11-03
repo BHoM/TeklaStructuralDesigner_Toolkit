@@ -107,6 +107,39 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
+
+        // The support a wall generates along its base (GenerateSupport and SupportData on the wall, not a
+        // point support), or null. Springs and partial fixity are reported through warning rather than
+        // converted, as is a base support the wall should have but does not.
+        public static Constraint6DOF FromTsdWallBaseSupport(this TSD.API.Remoting.Structure.IStructuralWallData wallData, out string warning)
+        {
+            warning = null;
+            if (wallData == null)
+                return null;
+
+            if (!wallData.GenerateSupport.ValueOrDefault(false))
+            {
+                if (wallData.AutomaticGenerateSupport.ValueOrDefault(false))
+                    warning = "wall(s) leave Tekla Structural Designer to decide whether they generate a base support, and it reported none, so they have been pulled unsupported at the base. Check this against the model";
+
+                return null;
+            }
+
+            bool isPartial;
+            Constraint6DOF support = wallData.SupportData.ValueOrDefault().FromTsdConstraint(out isPartial);
+            if (support == null)
+            {
+                warning = "wall(s) generate a base support but Tekla Structural Designer reported no fixity for it, so they have been pulled unsupported at the base";
+                return null;
+            }
+
+            if (isPartial)
+                warning = "wall base support(s) have spring or partial fixity in at least one direction. Their fixed and free directions have been pulled, but the springs have not";
+
+            return support;
+        }
+
+        /***************************************************/
         /**** Private Methods                           ****/
         /***************************************************/
 
