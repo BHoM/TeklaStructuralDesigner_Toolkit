@@ -63,6 +63,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
             if (type == typeof(Node))
                 return ReadNodes(ids).Cast<IBHoMObject>();
 
+            if (type == typeof(Panel))
+                return ReadPanels(ids, config).Cast<IBHoMObject>();
+
             if (type == typeof(Level))
                 return ReadLevels(ids).Cast<IBHoMObject>();
 

@@ -125,6 +125,22 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
+
+        [Test]
+        [Description("Every panel element type maps to the Tekla Structural Designer entity of the same name, and Undefined to Unknown.")]
+        public void EveryPanelElementTypeMapsToItsEntity()
+        {
+            foreach (TeklaStructuralDesignerPanelElementType value in Enum.GetValues(typeof(TeklaStructuralDesignerPanelElementType)))
+            {
+                TsdEntityType entity = value.ToTsd();
+                if (value == TeklaStructuralDesignerPanelElementType.Undefined)
+                    entity.ShouldBe(TsdEntityType.Unknown);
+                else
+                    entity.ToString().ShouldBe(value.ToString());
+            }
+        }
+
+        /***************************************************/
         /**** Private Methods                           ****/
         /***************************************************/
 
