@@ -97,6 +97,76 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
+        /**** Public Methods - Results                  ****/
+        /***************************************************/
+
+        internal static string NoRequest()
+        {
+            return "No result request was provided, so no results were read from Tekla Structural Designer.";
+        }
+
+        /***************************************************/
+
+        internal static string UnsupportedResultType(string resultType, string supported)
+        {
+            return "Results of type " + resultType + " cannot be read from Tekla Structural Designer by this adapter. " + supported;
+        }
+
+        /***************************************************/
+
+        internal static string ExtremeValuesUnsupported()
+        {
+            return "Tekla Structural Designer does not report extreme values for one dimensional elements, so DivisionType.ExtremeValues cannot be served. " +
+                   "Pull with DivisionType.EvenlyDistributed and a division count instead, then use AbsoluteMaxForce from the Structure_Engine to reduce them.";
+        }
+
+        /***************************************************/
+
+        internal static string DivisionsNotEvenlyDistributed(int divisions)
+        {
+            return "Divisions is set to " + divisions + ", but Tekla Structural Designer only stores bar forces at the nodes of its analysis model, where another element or a support connects to the bar, " +
+                   "not at evenly spaced points. Each bar returns one result per node, so the number and positions of results may not match the Divisions input, " +
+                   "and a bar with nothing connected along its length returns its end forces only, without the force at midspan. Set Divisions to 2 to read end forces only.";
+        }
+
+        /***************************************************/
+
+        internal static string DivisionsIgnoredBySpanEnds(int divisions)
+        {
+            return "Divisions is set to " + divisions + ", but the per span end route reads the end forces of each bar only. Only the two end forces of each bar have been returned.";
+        }
+
+        /***************************************************/
+
+        internal static string NoSpans()
+        {
+            return "No spans were found in the model open in Tekla Structural Designer, so no bar results could be read.";
+        }
+
+        /***************************************************/
+
+        internal static string NoCases()
+        {
+            return "No loading cases were found in the model open in Tekla Structural Designer, so no results could be read. " +
+                   "Check that the model contains load combinations and has been analysed.";
+        }
+
+        /***************************************************/
+
+        internal static string NoNodes()
+        {
+            return "No Nodes were found in the model open in Tekla Structural Designer, so no node results could be read.";
+        }
+
+        /***************************************************/
+
+        internal static string NoSolvedCases(string analysisType)
+        {
+            return "None of the requested loading cases has been solved for " + analysisType +
+                   " in Tekla Structural Designer. Run the analysis, or choose a different AnalysisType on the pull configuration, then pull again.";
+        }
+
+        /***************************************************/
         /**** Private Methods                           ****/
         /***************************************************/
 

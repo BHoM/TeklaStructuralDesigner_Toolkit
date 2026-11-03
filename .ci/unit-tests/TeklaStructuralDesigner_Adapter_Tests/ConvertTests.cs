@@ -77,6 +77,32 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        public void EveryAnalysisTypeMapsToTheSameNamedTsdValue()
+        {
+            BH.Engine.Base.Compute.ClearCurrentEvents();
+
+            foreach (TeklaStructuralDesignerAnalysisType value in Enum.GetValues(typeof(TeklaStructuralDesignerAnalysisType)))
+                value.ToTsd().ToString().ShouldBe(value.ToString());
+
+            BH.Engine.Base.Query.CurrentEvents().ShouldBeEmpty();
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void EveryLoadingResultTypeMapsToTheSameNamedTsdValue()
+        {
+            BH.Engine.Base.Compute.ClearCurrentEvents();
+
+            foreach (TeklaStructuralDesignerLoadingResultType value in Enum.GetValues(typeof(TeklaStructuralDesignerLoadingResultType)))
+                value.ToTsd().ToString().ShouldBe(value.ToString());
+
+            BH.Engine.Base.Query.CurrentEvents().ShouldBeEmpty();
+        }
+
+        /***************************************************/
+
+        [Test]
         public void StableGuidIsTheSameForTheSameObjectOnly()
         {
             Guid tsdId = Guid.NewGuid();
