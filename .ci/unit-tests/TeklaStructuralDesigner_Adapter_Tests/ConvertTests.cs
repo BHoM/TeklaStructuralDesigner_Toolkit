@@ -97,6 +97,31 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        public void NodeReactionSumsEverySolverNode()
+        {
+            NodeReaction reaction = new List<IForce3DGlobal> { new StubForce(1, 2, 3, 1000, 0, 0), new StubForce(1, 2, 3, 1000, 0, 0) }.FromTsdNodeReaction("N1", 7);
+
+            reaction.FX.ShouldBe(2, 1e-9);
+            reaction.FZ.ShouldBe(6, 1e-9);
+            reaction.MX.ShouldBe(2, 1e-9);
+            reaction.ResultCase.ShouldBe(7);
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void NodeDisplacementIsInMetresAndRadians()
+        {
+            NodeDisplacement displacement = new StubDisplacement(1, 2, -3, 0.1, 0.2, 0.3).FromTsdNodeDisplacement("N1", 1048);
+
+            displacement.UX.ShouldBe(0.001, 1e-12);
+            displacement.UZ.ShouldBe(-0.003, 1e-12);
+            displacement.RZ.ShouldBe(0.3, 1e-12);
+        }
+
+        /***************************************************/
+
+        [Test]
         public void PointsAreScaledAndVectorsAreNot()
         {
             Point point = new TsdPoint3D(1000, 2000, -500).FromTsdPoint();
@@ -250,6 +275,25 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
             public double Mz { get; }
             public TsdVector3D Forces => new TsdVector3D(Fx, Fy, Fz);
             public TsdVector3D Moments => new TsdVector3D(Mx, My, Mz);
+        }
+
+        /***************************************************/
+
+        private sealed class StubDisplacement : IDisplacement
+        {
+            public StubDisplacement(double mx, double my, double mz, double rx, double ry, double rz)
+            {
+                Mx = mx; My = my; Mz = mz; Rx = rx; Ry = ry; Rz = rz;
+            }
+
+            public double Mx { get; }
+            public double My { get; }
+            public double Mz { get; }
+            public double Rx { get; }
+            public double Ry { get; }
+            public double Rz { get; }
+            public TsdVector3D Movements => new TsdVector3D(Mx, My, Mz);
+            public TsdVector3D Rotations => new TsdVector3D(Rx, Ry, Rz);
         }
 
         /***************************************************/
