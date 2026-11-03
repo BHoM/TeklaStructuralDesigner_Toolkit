@@ -50,5 +50,17 @@ namespace BH.Adapter.TeklaStructuralDesigner
         }
 
         /***************************************************/
+
+        // A polygon in a plane's local coordinates as a closed global Polyline. Local2Global is evaluated
+        // locally by the API, so this makes no call to Tekla Structural Designer.
+        public static Polyline FromTsdPolyline(this IEnumerable<TsdPoint2D> vertices, TsdPlane plane)
+        {
+            if (vertices == null || plane == null)
+                return null;
+
+            return Helpers.ClosedPolyline(vertices.Select(v => plane.Local2Global(v).FromTsdPoint()));
+        }
+
+        /***************************************************/
     }
 }

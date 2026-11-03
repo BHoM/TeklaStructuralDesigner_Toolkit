@@ -76,6 +76,33 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        public void ClosedPolylineDropsRepeatedVerticesAndCloses()
+        {
+            Polyline polyline = Helpers.ClosedPolyline(new[]
+            {
+                new Point { X = 0, Y = 0 },
+                new Point { X = 1, Y = 0 },
+                new Point { X = 1, Y = 0 },
+                new Point { X = 1, Y = 1 },
+                new Point { X = 0, Y = 1 },
+            });
+
+            polyline.ControlPoints.Count.ShouldBe(5);
+            polyline.ControlPoints.First().ShouldBe(polyline.ControlPoints.Last());
+        }
+
+        /***************************************************/
+
+        [Test]
+        public void ClosedPolylineNeedsThreeVertices()
+        {
+            Helpers.ClosedPolyline(new[] { new Point(), new Point { X = 1 } }).ShouldBeNull();
+            Helpers.ClosedPolyline(null).ShouldBeNull();
+        }
+
+        /***************************************************/
+
+        [Test]
         public void SummaryShowsTheFirstNamesAndCountsTheRest()
         {
             Helpers.Summary(new[] { "A", "", "C" }).ShouldBe("A, <unnamed>, C");
