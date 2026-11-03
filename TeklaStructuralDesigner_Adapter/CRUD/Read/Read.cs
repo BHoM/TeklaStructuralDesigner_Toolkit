@@ -79,6 +79,16 @@ namespace BH.Adapter.TeklaStructuralDesigner
                 return new List<IBHoMObject>();
             }
 
+            if (type == typeof(Loadcase))
+                return ReadLoadcases(ids).Cast<IBHoMObject>();
+
+            if (type == typeof(LoadCombination))
+                return ReadLoadCombinations(ids).Cast<IBHoMObject>();
+
+            // ICase means both kinds of case.
+            if (type == typeof(ICase))
+                return ReadLoadcases(ids).Cast<IBHoMObject>().Concat(ReadLoadCombinations(ids).Cast<IBHoMObject>());
+
             Engine.Base.Compute.RecordWarning($"Pulling objects of type {type.Name} is not supported by the Tekla Structural Designer adapter. This adapter reads Bars, Nodes, Panels, Levels, Grids, Loadcases, LoadCombinations, bar, nodal, area, contour and line loads, bar forces, node reactions and node displacements; use a BarResultRequest or a NodeResultRequest to pull results.");
             return new List<IBHoMObject>();
         }

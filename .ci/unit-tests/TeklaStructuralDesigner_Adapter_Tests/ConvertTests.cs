@@ -62,6 +62,20 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
 
         /***************************************************/
 
+        [TestCase(LoadcaseType.SelfWeight, LoadNature.Dead)]
+        [TestCase(LoadcaseType.AncillaryDead, LoadNature.SuperDead)]
+        [TestCase(LoadcaseType.Imposed, LoadNature.Live)]
+        [TestCase(LoadcaseType.Wind, LoadNature.Wind)]
+        [TestCase(LoadcaseType.Ice, LoadNature.Snow)]
+        [TestCase(LoadcaseType.MinimumLateralLoad, LoadNature.Notional)]
+        [TestCase(LoadcaseType.Settlement, LoadNature.Other)]
+        public void LoadcaseTypesMapToLoadNature(LoadcaseType type, LoadNature expected)
+        {
+            type.FromTsdLoadNature().ShouldBe(expected);
+        }
+
+        /***************************************************/
+
         [Test]
         public void StableGuidIsTheSameForTheSameObjectOnly()
         {
