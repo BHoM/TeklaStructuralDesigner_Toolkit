@@ -97,6 +97,26 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        [Description("Every slab type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
+        public void EverySlabTypeMapsByName()
+        {
+            foreach (SlabType value in Enum.GetValues(typeof(SlabType)))
+                ShouldMapByName(value, value.FromTsd(out bool recognised), recognised);
+        }
+
+        /***************************************************/
+
+        [Test]
+        [Description("Every roof type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
+        public void EveryRoofTypeMapsByName()
+        {
+            foreach (RoofType value in Enum.GetValues(typeof(RoofType)))
+                ShouldMapByName(value, value.FromTsd(out bool recognised), recognised);
+        }
+
+        /***************************************************/
+
+        [Test]
         [Description("Every span type in the API maps to the oM value of the same name, and Unknown to Undefined.")]
         public void EverySpanTypeMapsByName()
         {
