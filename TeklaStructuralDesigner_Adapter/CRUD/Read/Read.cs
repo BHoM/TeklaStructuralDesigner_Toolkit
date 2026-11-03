@@ -57,6 +57,9 @@ namespace BH.Adapter.TeklaStructuralDesigner
 
             TeklaStructuralDesignerPullConfig config = PullConfigOrDefault(actionConfig);
 
+            if (type == typeof(Node))
+                return ReadNodes(ids).Cast<IBHoMObject>();
+
             if (type == typeof(Level))
                 return ReadLevels(ids).Cast<IBHoMObject>();
 

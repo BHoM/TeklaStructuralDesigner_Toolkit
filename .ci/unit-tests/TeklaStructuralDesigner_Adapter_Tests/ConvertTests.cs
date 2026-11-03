@@ -76,6 +76,19 @@ namespace BH.Tests.Adapter.TeklaStructuralDesigner
         /***************************************************/
 
         [Test]
+        public void SetIdentityGivesTheSameBHoMGuidOnEveryPull()
+        {
+            Guid tsdId = Guid.NewGuid();
+            Node first = BH.Adapter.TeklaStructuralDesigner.Convert.FromTsdNode(tsdId, new Point());
+            Node second = BH.Adapter.TeklaStructuralDesigner.Convert.FromTsdNode(tsdId, new Point());
+
+            second.BHoM_Guid.ShouldBe(first.BHoM_Guid);
+            first.AdapterId<object>(typeof(TeklaStructuralDesignerId)).ShouldBe(tsdId);
+        }
+
+        /***************************************************/
+
+        [Test]
         public void ClosedPolylineDropsRepeatedVerticesAndCloses()
         {
             Polyline polyline = Helpers.ClosedPolyline(new[]
