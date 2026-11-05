@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,50 +20,24 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.ComponentModel;
 using BH.oM.Base;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Common.Materials;
-using BH.oM.Adapter;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("Settings controlling how the TeklaStructuralDesignerAdapter connects to Tekla Structural Designer. Supplied once when the adapter is created, unlike a pull configuration which is supplied per action.")]
+    public class TeklaStructuralDesignerConfig : BHoMObject
     {
         /***************************************************/
-        /**** Adapter overload method                   ****/
+        /**** Public Properties                         ****/
         /***************************************************/
 
-        // This method gets called when appropriate by the Pull method contained in the base Adapter class.
-        // It gets called once per each Type.
-        protected override IEnumerable<IBHoMObject> IRead(Type type, IList ids, ActionConfig actionConfig = null)
-        {
-            //Main dispatcher method.
-            //Choose what to pull out depending on the type.
-            if (type == typeof(Node))
-                return ReadNodes(ids as dynamic);
-            else if (type == typeof(Bar))
-                return ReadBars(ids as dynamic);
-            else if (type == typeof(ISectionProperty) || type.GetInterfaces().Contains(typeof(ISectionProperty)))
-                return ReadSectionProperties(ids as dynamic);
-            else if (type == typeof(Material))
-                return ReadMaterials(ids as dynamic);
+        [Description("How long to wait, in seconds, for Tekla Structural Designer to respond to a single API call before giving up. Zero or negative waits indefinitely. The default is generous because a first call against a large model can be slow.")]
+        public virtual int TimeoutSeconds { get; set; } = 300;
 
-            return new List<IBHoMObject>();
-        }
+        [Description("If true, and more than one instance of Tekla Structural Designer is running while no model path was supplied to disambiguate them, the adapter binds to the first instance it finds. If false it refuses to guess and reports an error naming every instance. Leave this false: binding to an arbitrary instance means results can silently come from the wrong model.")]
+        public virtual bool AllowArbitraryInstanceSelection { get; set; } = false;
 
         /***************************************************/
-
     }
 }
-
-
-
-
-

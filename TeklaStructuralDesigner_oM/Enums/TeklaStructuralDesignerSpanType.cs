@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,40 +20,20 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Structure.Elements;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("How a slab, roof or wind wall spans in Tekla Structural Designer, mirroring TSD.API.Remoting.Structure.DecompositionType. Mirrored rather than referenced directly because a BHoM _oM assembly must not depend on an external software API.")]
+    public enum TeklaStructuralDesignerSpanType
     {
+        [Description("Not known, or not applicable to the element.")]
+        Undefined,
 
-        /***************************************************/
-        /**** Private methods                           ****/
-        /***************************************************/
+        [Description("Spans one way, along the local x of the Panel.")]
+        OneWay,
 
-        private bool CreateCollection(IEnumerable<Node> nodes)
-        {
-            //Code for creating a collection of nodes in the software
-
-            foreach (Node node in nodes)
-            {
-                //Tip: if the NextId method has been implemented you can get the id to be used for the creation out as (cast into applicable type used by the software):
-                object nodeId = node.CustomData[AdapterIdName];
-            }
-
-            throw new NotImplementedException();
-        }
-
-        /***************************************************/
+        [Description("Spans two ways.")]
+        TwoWay,
     }
 }
-
-
-
-
-

@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,40 +20,17 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Base;
-using BH.oM.Structure.SectionProperties;
-using BH.oM.Common.Materials;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("The limit state a load combination pulled from Tekla Structural Designer represents. Tekla Structural Designer holds a strength, a service and a quasi permanent service factor against every loadcase of one combination, and solves the strength and service sets separately. BHoM's LoadCombination holds one factor per loadcase, so each Tekla Structural Designer combination is pulled as one LoadCombination per limit state.")]
+    public enum TeklaStructuralDesignerLimitState
     {
+        [Description("The ultimate limit state: the combination's strength factors, and the results Tekla Structural Designer designs with. Numbered 1000 + the Tekla Structural Designer combination number.")]
+        Strength,
 
-        /***************************************************/
-        /**** Private methods                           ****/
-        /***************************************************/
-
-        //The List<string> in the methods below can be changed to a list of any type of identification more suitable for the toolkit
-        //If no ids are provided, the convention is to return all elements of the type
-
-        private List<ISectionProperty> ReadSectionProperties(List<string> ids = null)
-        {
-            //Implement code for reading section properties
-            throw new NotImplementedException();
-        }
-
-        /***************************************************/
-
+        [Description("The serviceability limit state: the combination's service factors, and the results Tekla Structural Designer checks deflection with. Numbered 2000 + the Tekla Structural Designer combination number.")]
+        Service,
     }
 }
-
-
-
-
-

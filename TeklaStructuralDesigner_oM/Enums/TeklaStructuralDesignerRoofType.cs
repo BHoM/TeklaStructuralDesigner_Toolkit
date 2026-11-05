@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,34 +20,35 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Structure.Elements;
+using System.ComponentModel;
 
-namespace BH.Engine.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public static partial class Convert
+    [Description("The shape of a roof in Tekla Structural Designer, mirroring TSD.API.Remoting.Structure.RoofType. Mirrored rather than referenced directly because a BHoM _oM assembly must not depend on an external software API.")]
+    public enum TeklaStructuralDesignerRoofType
     {
-        /***************************************************/
-        /**** Public Methods                            ****/
-        /***************************************************/
+        [Description("Not known, or the Panel was not pulled from a roof.")]
+        Undefined,
 
-        //Add methods for converting to BHoM from the specific software types. 
-        //Only do this if possible to do without any com-calls or similar to the adapter
-        //Example:
-        //public static Node ToBHoM(this TeklaStructuralDesigner.Node node)
-        //{
-        //    //Insert code for convertion
-        //}
+        [Description("A roof whose shape Tekla Structural Designer works out automatically.")]
+        Auto,
 
-        /***************************************************/
+        [Description("A flat roof.")]
+        Flat,
+
+        [Description("A mono-pitch roof.")]
+        MonoPitch,
+
+        [Description("A duo-pitch roof.")]
+        DuoPitch,
+
+        [Description("The gable end of a hipped roof.")]
+        HipGable,
+
+        [Description("The main slope of a hipped roof.")]
+        HipMain,
+
+        [Description("A mansard roof.")]
+        Mansard,
     }
 }
-
-
-
-
-

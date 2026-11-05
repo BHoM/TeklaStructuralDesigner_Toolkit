@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,35 +20,26 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Adapter;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("The kind of Tekla Structural Designer element a Panel was pulled from.")]
+    public enum TeklaStructuralDesignerPanelElementType
     {
-        /***************************************************/
-        /**** Adapter overload method                   ****/
-        /***************************************************/
+        [Description("Not known.")]
+        Undefined,
 
-        // This method gets called when appropriate by the Push method contained in the base Adapter class.
-        // It gets called once per each Type, and if equal objects are found. The equality is tested through IEqualityComparer.
-        // IEqualityComparer must be implemented per each type. If not,
-        // by default the method first deletes the existing objects, then creates new ones.
-        protected override bool IUpdate<T>(IEnumerable<T> objects, ActionConfig actionConfig = null)
-        {
-            return base.IUpdate<T>(objects);
-        }
+        [Description("A slab item: one piece of a slab, carrying the slab's structural property.")]
+        SlabItem,
 
-        /***************************************************/
+        [Description("A panel of a structural wall. Each panel of a wall is pulled as a Panel of its own.")]
+        StructuralWall,
+
+        [Description("A roof, which only collects load and carries a LoadingPanelProperty.")]
+        Roof,
+
+        [Description("A wind wall, which only collects wind load and carries a LoadingPanelProperty.")]
+        WindWall,
     }
 }
-
-
-
-
-

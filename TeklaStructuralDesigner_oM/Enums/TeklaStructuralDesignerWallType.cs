@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,40 +20,26 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Base;
-using BH.oM.Structure.Elements;
-using BH.oM.Structure.Constraints;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("The type of a structural wall in Tekla Structural Designer, mirroring TSD.API.Remoting.Structure.StructuralWallType. Mirrored rather than referenced directly because a BHoM _oM assembly must not depend on an external software API.")]
+    public enum TeklaStructuralDesignerWallType
     {
+        [Description("Not known, or the Panel was not pulled from a structural wall.")]
+        Undefined,
 
-        /***************************************************/
-        /**** Private methods                           ****/
-        /***************************************************/
+        [Description("A shear wall analysed as a mesh of shell elements.")]
+        MeshedShearWall,
 
-        //The List<string> in the methods below can be changed to a list of any type of identification more suitable for the toolkit
-        //If no ids are provided, the convention is to return all elements of the type
+        [Description("A shear wall analysed as a mid-pier: a line of beam elements along its centre.")]
+        MidPierShearWall,
 
-        private List<Node> ReadNodes(List<string> ids = null)
-        {
-            //Implement code for reading nodes
-            throw new NotImplementedException();
-        }
+        [Description("A bearing wall.")]
+        BearingWall,
 
-        /***************************************************/
-
+        [Description("A wall that resists shear only.")]
+        ShearOnlyWall,
     }
 }
-
-
-
-
-

@@ -1,6 +1,6 @@
 /*
  * This file is part of the Buildings and Habitats object Model (BHoM)
- * Copyright (c) 2015 - 2024, the respective contributors. All rights reserved.
+ * Copyright (c) 2015 - 2026, the respective contributors. All rights reserved.
  *
  * Each contributor holds copyright over their respective contributions.
  * The project versioning (Git) records all such contribution source information.
@@ -20,41 +20,38 @@
  * along with this code. If not, see <https://www.gnu.org/licenses/lgpl-3.0.html>.      
  */
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using BH.oM.Common.Materials;
+using System.ComponentModel;
 
-namespace BH.Adapter.TeklaStructuralDesigner
+namespace BH.oM.Adapters.TeklaStructuralDesigner
 {
-    public partial class TeklaStructuralDesignerAdapter
+    [Description("The type of a slab in Tekla Structural Designer, mirroring TSD.API.Remoting.Structure.SlabType. Mirrored rather than referenced directly because a BHoM _oM assembly must not depend on an external software API.")]
+    public enum TeklaStructuralDesignerSlabType
     {
+        [Description("Not known, or the Panel was not pulled from a slab item.")]
+        Undefined,
 
-        /***************************************************/
-        /**** Private methods                           ****/
-        /***************************************************/
+        [Description("A precast slab: planks, with or without a topping.")]
+        Precast,
 
-        private bool CreateCollection(IEnumerable<Material> materials)
-        {
-            //Code for creating a collection of materials in the software
+        [Description("A composite slab on a metal deck.")]
+        Composite,
 
-            foreach (Material material in materials)
-            {
-                //Tip: if the NextId method has been implemented you can get the id to be used for the creation out as (cast into applicable type used by the software):
-                object materialId = material.CustomData[AdapterIdName];
-            }
+        [Description("A flat concrete slab.")]
+        Flat,
 
-            throw new NotImplementedException();
-        }
+        [Description("A concrete slab supported on beams.")]
+        OnBeams,
 
+        [Description("A ribbed concrete slab.")]
+        Rib,
 
-        /***************************************************/
+        [Description("A waffle concrete slab.")]
+        Waffle,
+
+        [Description("A foundation mat.")]
+        FoundationMat,
+
+        [Description("A general slab.")]
+        General,
     }
 }
-
-
-
-
-
